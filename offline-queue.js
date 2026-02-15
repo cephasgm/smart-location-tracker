@@ -13,19 +13,18 @@ class OfflineQueue {
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
                 this.db = request.result;
+                console.log('✅ IndexedDB initialized');
                 resolve(this.db);
             };
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
                 if (!db.objectStoreNames.contains(this.storeName)) {
-                    // Create object store for offline locations
                     const store = db.createObjectStore(this.storeName, { 
                         keyPath: 'id', 
                         autoIncrement: true 
                     });
                     
-                    // Create indexes for querying
                     store.createIndex('timestamp', 'timestamp', { unique: false });
                     store.createIndex('synced', 'synced', { unique: false });
                 }
@@ -43,14 +42,14 @@ class OfflineQueue {
                 
                 const location = {
                     ...locationData,
-                    timestamp: Date.now(),
+                    queuedAt: Date.now(),
                     synced: false
                 };
                 
                 const request = store.add(location);
                 
                 request.onsuccess = () => {
-                    console.log('Location queued offline:', location);
+                    console.log('📍 Location queued offline');
                     this.updateQueueCount();
                     resolve(request.result);
                 };
@@ -58,7 +57,7 @@ class OfflineQueue {
                 request.onerror = () => reject(request.error);
             });
         } catch (error) {
-            console.error('Failed to queue location:', error);
+            console.error('❌ Failed to queue location:', error);
         }
     }
 
@@ -75,7 +74,7 @@ class OfflineQueue {
                 request.onerror = () => reject(request.error);
             });
         } catch (error) {
-            console.error('Failed to get queued locations:', error);
+            console.error('❌ Failed to get queued locations:', error);
             return [];
         }
     }
@@ -88,9 +87,9 @@ class OfflineQueue {
                 return;
             }
             
-            console.log(`Syncing ${locations.length} offline locations...`);
+            console.log(`🔄 Syncing ${locations.length} offline locations...`);
             
-            const db = firebaseServices.db;
+            const db = window.firebaseServices.db;
             const batch = db.batch();
             
             for (const location of locations) {
@@ -107,11 +106,11 @@ class OfflineQueue {
             // Clear synced locations
             await this.clearSyncedLocations(locations);
             
-            console.log('Offline locations synced successfully');
+            console.log('✅ Offline locations synced successfully');
             this.updateQueueCount();
             
         } catch (error) {
-            console.error('Failed to sync offline locations:', error);
+            console.error('❌ Failed to sync offline locations:', error);
             
             // Register for background sync if available
             if ('serviceWorker' in navigator && 'SyncManager' in window) {
@@ -151,7 +150,7 @@ class OfflineQueue {
                 countElement.textContent = `Offline queue: ${locations.length}`;
             }
         } catch (error) {
-            console.error('Failed to update queue count:', error);
+            console.error('❌ Failed to update queue count:', error);
         }
     }
 
@@ -163,3 +162,4 @@ class OfflineQueue {
 
 // Initialize offline queue
 const offlineQueue = new OfflineQueue();
+window.offlineQueue = offlineQueue;

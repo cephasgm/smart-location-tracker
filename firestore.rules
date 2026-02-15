@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isValidLocation() {
+      return request.resource.data.lat is number &&
+             request.resource.data.lng is number &&
+             request.resource.data.lat >= -90 && request.resource.data.lat <= 90 &&
+             request.resource.data.lng >= -180 && request.resource.data.lng <= 180;
+    }
+
+    // Locations collection
+    match /locations/{document} {
+      allow read: if isAuthenticated() && 
+                   (isOwner(resource.data.userId) || 
+                    request.auth.token.email == 'admin@example.com');
+      
+      allow create: if isAuthenticated() && 
+                    request.resource.data.userId == request.auth.uid &&
+                    isValidLocation();
+      
+      allow update: if false; // No updates allowed, only creates
+      
+      allow delete: if false; // No deletions allowed
+    }
+
+    // Geofences collection
+    match /geofences/{document} {
+      allow read: if isAuthenticated() && 
+                   (isOwner(resource.data.userId) || 
+                    request.auth.token.email == 'admin@example.com');
+      
+      allow create: if isAuthenticated() && 
+                    request.resource.data.userId == request.auth.uid &&
+                    request.resource.data.radius is number &&
+                    request.resource.data.radius > 0;
+      
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && 
+                   (isOwner(userId) || 
+                    request.auth.token.email == 'admin@example.com');
+      
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
+  }
+}

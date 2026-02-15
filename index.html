@@ -7,9 +7,19 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2196f3">
+    <!-- Fix deprecated meta tag - use standard web app capable -->
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <link rel="apple-touch-icon" href="assets/icons/icon-192x192.png">
+    <!-- Fix icon paths - they're in root, not assets/icons/ -->
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="icon" type="image/png" href="icon-192x192.png">
+    
+    <!-- Load Leaflet CSS - this was missing -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Add fallback for offline support -->
+    <meta name="apple-mobile-web-app-title" content="Smart Tracker">
 </head>
 <body>
     <div class="app-container">
@@ -67,17 +77,39 @@
         </footer>
     </div>
 
-    <!-- Scripts -->
+    <!-- Scripts - loaded in correct dependency order -->
+    <!-- Third-party libraries first -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Core modules that don't have dependencies on others -->
     <script src="firebase-init.js"></script>
-    <script src="auth.js"></script>
-    <script src="offline-queue.js"></script>
-    <script src="location-engine.js"></script>
+    
+    <!-- Anti-spoof must load BEFORE location-engine as it's a dependency -->
     <script src="anti-spoof.js"></script>
+    
+    <!-- Other modules in correct order -->
     <script src="geofence-engine.js"></script>
+    <script src="offline-queue.js"></script>
+    <script src="auth.js"></script>
+    
+    <!-- Location engine depends on anti-spoof and geofence-engine -->
+    <script src="location-engine.js"></script>
+    
+    <!-- App initializer loads last as it depends on everything -->
     <script src="app.js"></script>
+    
+    <!-- Add error handling for script loading -->
+    <script>
+        window.addEventListener('error', function(e) {
+            if (e.target.tagName === 'SCRIPT') {
+                console.error('Failed to load script:', e.target.src);
+                document.getElementById('connectionStatus').innerHTML = '🔴 Script Error';
+                document.getElementById('connectionStatus').style.backgroundColor = '#ffebee';
+            }
+        }, true);
+    </script>
 </body>
 </html>

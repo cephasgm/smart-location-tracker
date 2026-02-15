@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Location Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2196f3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192x192.png">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>📍 Smart Location Tracker</h1>
+            <div class="connection-status" id="connectionStatus">🟢 Online</div>
+        </header>
+
+        <main>
+            <div class="auth-section" id="authSection">
+                <h2>Authentication</h2>
+                <button id="anonymousSignIn" class="btn btn-primary">Continue Anonymously</button>
+                <div class="divider">or</div>
+                <form id="emailSignInForm">
+                    <input type="email" id="email" placeholder="Email" required>
+                    <input type="password" id="password" placeholder="Password" required>
+                    <button type="submit" class="btn btn-secondary">Sign In with Email</button>
+                </form>
+            </div>
+
+            <div class="tracking-section hidden" id="trackingSection">
+                <div class="location-permission" id="locationPermission">
+                    <p>We need your permission to track your location</p>
+                    <button id="requestLocationBtn" class="btn btn-primary">Enable Location Tracking</button>
+                </div>
+
+                <div class="tracking-controls">
+                    <button id="startTrackingBtn" class="btn btn-success" disabled>Start Tracking</button>
+                    <button id="stopTrackingBtn" class="btn btn-danger" disabled>Stop Tracking</button>
+                </div>
+
+                <div class="location-info">
+                    <h3>Current Location</h3>
+                    <div id="locationStatus" class="status-warning">Waiting for GPS...</div>
+                    <div id="coordinates">Lat: --, Lng: --</div>
+                    <div id="accuracy">Accuracy: -- m</div>
+                    <div id="timestamp">Last update: --</div>
+                    <div id="geofenceStatus"></div>
+                </div>
+
+                <div class="map-container">
+                    <div id="map"></div>
+                </div>
+
+                <div class="stats">
+                    <h3>Tracking Stats</h3>
+                    <div id="totalPoints">Points tracked: 0</div>
+                    <div id="offlineQueue">Offline queue: 0</div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>🔒 User-consented tracking only | GDPR Compliant</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-init.js"></script>
+    <script src="auth.js"></script>
+    <script src="offline-queue.js"></script>
+    <script src="location-engine.js"></script>
+    <script src="anti-spoof.js"></script>
+    <script src="geofence-engine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

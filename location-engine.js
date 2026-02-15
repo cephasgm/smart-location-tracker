@@ -6,13 +6,51 @@ class LocationEngine {
         this.map = null;
         this.marker = null;
         this.polyline = null;
-        this.antiSpoof = new AntiSpoof();
-        this.geofenceEngine = new GeofenceEngine();
-        this.maxLocations = 1000; // Maximum locations to keep in memory
+        this.maxLocations = 1000;
+        
+        // Wait for dependencies
+        this.waitForDependencies();
+    }
+
+    waitForDependencies() {
+        // Check if all dependencies are available
+        if (!window.AntiSpoof) {
+            console.log('⏳ Waiting for AntiSpoof...');
+            setTimeout(() => this.waitForDependencies(), 100);
+            return;
+        }
+
+        if (!window.GeofenceEngine) {
+            console.log('⏳ Waiting for GeofenceEngine...');
+            setTimeout(() => this.waitForDependencies(), 100);
+            return;
+        }
+
+        if (!window.offlineQueue) {
+            console.log('⏳ Waiting for offlineQueue...');
+            setTimeout(() => this.waitForDependencies(), 100);
+            return;
+        }
+
+        // Initialize dependencies
+        this.antiSpoof = new window.AntiSpoof();
+        this.geofenceEngine = new window.GeofenceEngine();
+        
+        // Initialize map
         this.initMap();
+        
+        console.log('✅ LocationEngine initialized');
     }
 
     initMap() {
+        // Wait for map container to exist
+        const mapContainer = document.getElementById('map');
+        if (!mapContainer) {
+            console.log('⏳ Waiting for map container...');
+            setTimeout(() => this.initMap(), 100);
+            return;
+        }
+
         // Initialize map with OpenStreetMap
         this.map = L.map('map').setView([0, 0], 13);
         
@@ -27,6 +65,8 @@ class LocationEngine {
             iconSize: [30, 30],
             popupAnchor: [0, -15]
         });
+
+        console.log('🗺️ Map initialized');
     }
 
     async requestLocationPermission() {
@@ -63,6 +103,7 @@ class LocationEngine {
 
         this.isTracking = true;
         this.updateTrackingUI();
+        console.log('📍 Started tracking');
     }
 
     stopTracking() {
@@ -71,6 +112,7 @@ class LocationEngine {
             this.watchId = null;
             this.isTracking = false;
             this.updateTrackingUI();
+            console.log('⏹️ Stopped tracking');
         }
     }
 
@@ -78,7 +120,6 @@ class LocationEngine {
         const { latitude, longitude, accuracy, speed, heading } = position.coords;
         const timestamp = position.timestamp;
 
-        // Anti-spoofing check
         const locationData = {
             lat: latitude,
             lng: longitude,
@@ -88,8 +129,9 @@ class LocationEngine {
             timestamp
         };
 
+        // Anti-spoofing check
         if (!this.antiSpoof.validateLocation(locationData)) {
-            console.warn('Potential location spoofing detected');
+            console.warn('⚠️ Potential location spoofing detected');
             this.showWarning('Location spoofing detected!');
             return;
         }
@@ -109,7 +151,7 @@ class LocationEngine {
         // Save location
         await this.saveLocation({
             ...locationData,
-            userId: authManager.currentUser?.uid
+            userId: window.authManager?.currentUser?.uid
         });
 
         // Add to trail
@@ -133,8 +175,11 @@ class LocationEngine {
         }
         
         this.showError(message);
-        document.getElementById('locationStatus').textContent = '⚠️ ' + message;
-        document.getElementById('locationStatus').className = 'status-error';
+        const locationStatus = document.getElementById('locationStatus');
+        if (locationStatus) {
+            locationStatus.textContent = '⚠️ ' + message;
+            locationStatus.className = 'status-error';
+        }
     }
 
     async saveLocation(locationData) {
@@ -147,14 +192,16 @@ class LocationEngine {
         }
 
         // Update UI
-        document.getElementById('totalPoints').textContent = 
-            `Points tracked: ${this.locations.length}`;
+        const totalPoints = document.getElementById('totalPoints');
+        if (totalPoints) {
+            totalPoints.textContent = `Points tracked: ${this.locations.length}`;
+        }
 
         // Check online status
-        if (navigator.onLine) {
+        if (navigator.onLine && window.firebaseServices) {
             try {
                 // Save to Firestore
-                const db = firebaseServices.db;
+                const db = window.firebaseServices.db;
                 await db.collection('locations').add({
                     ...locationData,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -162,11 +209,15 @@ class LocationEngine {
             } catch (error) {
                 console.error('Failed to save to Firestore:', error);
                 // Queue offline
-                await offlineQueue.queueLocation(locationData);
+                if (window.offlineQueue) {
+                    await window.offlineQueue.queueLocation(locationData);
+                }
             }
         } else {
             // Queue offline
-            await offlineQueue.queueLocation(locationData);
+            if (window.offlineQueue) {
+                await window.offlineQueue.queueLocation(locationData);
+            }
         }
     }
 
@@ -206,23 +257,34 @@ class LocationEngine {
     }
 
     updateLocationUI(location) {
-        document.getElementById('coordinates').innerHTML = 
-            `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}`;
-        document.getElementById('accuracy').innerHTML = 
-            `Accuracy: ${location.accuracy.toFixed(1)} m`;
-        document.getElementById('timestamp').innerHTML = 
-            `Last update: ${new Date(location.timestamp).toLocaleTimeString()}`;
-        
+        const coordinatesEl = document.getElementById('coordinates');
+        const accuracyEl = document.getElementById('accuracy');
+        const timestampEl = document.getElementById('timestamp');
         const statusEl = document.getElementById('locationStatus');
-        if (location.accuracy < 20) {
-            statusEl.textContent = '✅ High accuracy GPS fix';
-            statusEl.className = 'status-success';
-        } else if (location.accuracy < 50) {
-            statusEl.textContent = '⚠️ Medium accuracy';
-            statusEl.className = 'status-warning';
-        } else {
-            statusEl.textContent = '🔴 Low accuracy';
-            statusEl.className = 'status-error';
+
+        if (coordinatesEl) {
+            coordinatesEl.innerHTML = `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}`;
+        }
+        
+        if (accuracyEl) {
+            accuracyEl.innerHTML = `Accuracy: ${location.accuracy.toFixed(1)} m`;
+        }
+        
+        if (timestampEl) {
+            timestampEl.innerHTML = `Last update: ${new Date(location.timestamp).toLocaleTimeString()}`;
+        }
+        
+        if (statusEl) {
+            if (location.accuracy < 20) {
+                statusEl.textContent = '✅ High accuracy GPS fix';
+                statusEl.className = 'status-success';
+            } else if (location.accuracy < 50) {
+                statusEl.textContent = '⚠️ Medium accuracy';
+                statusEl.className = 'status-warning';
+            } else {
+                statusEl.textContent = '🔴 Low accuracy';
+                statusEl.className = 'status-error';
+            }
         }
     }
 
@@ -230,27 +292,24 @@ class LocationEngine {
         const startBtn = document.getElementById('startTrackingBtn');
         const stopBtn = document.getElementById('stopTrackingBtn');
         
-        if (this.isTracking) {
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-        } else {
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-        }
+        if (startBtn) startBtn.disabled = this.isTracking;
+        if (stopBtn) stopBtn.disabled = !this.isTracking;
     }
 
     handleGeofenceAlerts(alerts) {
         const geofenceStatus = document.getElementById('geofenceStatus');
-        geofenceStatus.innerHTML = alerts.map(alert => 
-            `<div class="geofence-alert">${alert.message}</div>`
-        ).join('');
+        if (geofenceStatus) {
+            geofenceStatus.innerHTML = alerts.map(alert => 
+                `<div class="geofence-alert">${alert.message}</div>`
+            ).join('');
+        }
         
         // Show notification if supported
         if ('Notification' in window && Notification.permission === 'granted') {
             alerts.forEach(alert => {
                 new Notification('Geofence Alert', {
                     body: alert.message,
-                    icon: '/assets/icons/icon-192x192.png'
+                    icon: 'icon-192x192.png'
                 });
             });
         }
@@ -264,11 +323,12 @@ class LocationEngine {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            background: var(--danger-color);
+            background: #f44336;
             color: white;
             padding: 15px;
             border-radius: 5px;
             z-index: 1000;
+            animation: slideIn 0.3s ease;
         `;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
@@ -282,11 +342,12 @@ class LocationEngine {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            background: var(--warning-color);
+            background: #ff9800;
             color: white;
             padding: 15px;
             border-radius: 5px;
             z-index: 1000;
+            animation: slideIn 0.3s ease;
         `;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
@@ -300,5 +361,7 @@ class LocationEngine {
     }
 }
 
-// Initialize location engine
-const locationEngine = new LocationEngine();
+// Initialize location engine when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.locationEngine = new LocationEngine();
+});

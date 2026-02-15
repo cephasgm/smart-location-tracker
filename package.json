@@ -1,0 +1,28 @@
+{
+  "name": "smart-location-tracker",
+  "version": "1.0.0",
+  "description": "User-consented PWA location tracking with Firebase",
+  "main": "index.html",
+  "scripts": {
+    "start": "firebase serve",
+    "deploy": "firebase deploy",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:firestore": "firebase deploy --only firestore",
+    "build": "echo 'No build step required'"
+  },
+  "keywords": [
+    "pwa",
+    "location-tracking",
+    "firebase",
+    "geolocation",
+    "offline-first"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "firebase-tools": "^13.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

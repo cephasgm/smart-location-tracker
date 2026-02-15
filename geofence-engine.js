@@ -1,26 +1,39 @@
 class GeofenceEngine {
     constructor() {
         this.geofences = [];
+        // Wait for authManager to be available
+        this.waitForAuth();
+    }
+
+    waitForAuth() {
+        if (!window.authManager) {
+            console.log('⏳ Waiting for authManager...');
+            setTimeout(() => this.waitForAuth(), 100);
+            return;
+        }
         this.loadGeofences();
     }
 
     async loadGeofences() {
         try {
             // Load geofences from Firestore if authenticated
-            if (authManager.currentUser) {
-                const db = firebaseServices.db;
+            if (window.authManager && window.authManager.currentUser) {
+                const db = window.firebaseServices.db;
                 const snapshot = await db.collection('geofences')
-                    .where('userId', '==', authManager.currentUser.uid)
+                    .where('userId', '==', window.authManager.currentUser.uid)
                     .get();
                 
                 this.geofences = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 }));
+                console.log(`✅ Loaded ${this.geofences.length} geofences`);
+            } else {
+                // Load default geofences as fallback
+                this.loadDefaultGeofences();
             }
         } catch (error) {
-            console.error('Failed to load geofences:', error);
-            // Load default geofences as fallback
+            console.error('❌ Failed to load geofences:', error);
             this.loadDefaultGeofences();
         }
     }
@@ -44,6 +57,7 @@ class GeofenceEngine {
                 type: 'circle'
             }
         ];
+        console.log('📦 Loaded default geofences');
     }
 
     checkGeofences(location) {
@@ -62,7 +76,7 @@ class GeofenceEngine {
                 alerts.push({
                     type: 'entry',
                     fence: fence.name,
-                    message: `Entered ${fence.name}`,
+                    message: `📍 Entered ${fence.name}`,
                     location,
                     timestamp: Date.now()
                 });
@@ -73,7 +87,7 @@ class GeofenceEngine {
                 alerts.push({
                     type: 'exit',
                     fence: fence.name,
-                    message: `Exited ${fence.name}`,
+                    message: `🚪 Exited ${fence.name}`,
                     location,
                     timestamp: Date.now()
                 });
@@ -121,7 +135,7 @@ class GeofenceEngine {
             }
         }
         
-        return Infinity; // Assume outside if no recent data
+        return Infinity;
     }
 
     saveDistance(fenceId, location, distance) {
@@ -145,13 +159,13 @@ class GeofenceEngine {
             lng,
             radius,
             type,
-            userId: authManager.currentUser?.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            userId: window.authManager?.currentUser?.uid,
+            createdAt: new Date().toISOString()
         };
 
         try {
-            if (authManager.currentUser) {
-                const db = firebaseServices.db;
+            if (window.authManager?.currentUser) {
+                const db = window.firebaseServices.db;
                 const docRef = await db.collection('geofences').add(fence);
                 fence.id = docRef.id;
             } else {
@@ -159,24 +173,29 @@ class GeofenceEngine {
             }
 
             this.geofences.push(fence);
+            console.log(`✅ Added geofence: ${name}`);
             return fence;
         } catch (error) {
-            console.error('Failed to add geofence:', error);
+            console.error('❌ Failed to add geofence:', error);
             throw error;
         }
     }
 
     async removeGeofence(fenceId) {
         try {
-            if (authManager.currentUser && !fenceId.startsWith('local_')) {
-                const db = firebaseServices.db;
+            if (window.authManager?.currentUser && !fenceId.startsWith('local_')) {
+                const db = window.firebaseServices.db;
                 await db.collection('geofences').doc(fenceId).delete();
             }
 
             this.geofences = this.geofences.filter(f => f.id !== fenceId);
+            console.log(`✅ Removed geofence: ${fenceId}`);
         } catch (error) {
-            console.error('Failed to remove geofence:', error);
+            console.error('❌ Failed to remove geofence:', error);
             throw error;
         }
     }
 }
+
+// Make it globally available
+window.GeofenceEngine = GeofenceEngine;

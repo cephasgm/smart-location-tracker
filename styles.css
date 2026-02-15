@@ -1,3 +1,5 @@
+/* styles.css - Smart Location Tracker */
+/* Base styles and CSS reset */
 * {
     margin: 0;
     padding: 0;
@@ -6,13 +8,21 @@
 
 :root {
     --primary-color: #2196f3;
+    --primary-dark: #1976d2;
     --secondary-color: #4caf50;
+    --secondary-dark: #388e3c;
     --danger-color: #f44336;
+    --danger-dark: #d32f2f;
     --warning-color: #ff9800;
+    --warning-dark: #f57c00;
     --dark-bg: #333;
     --light-bg: #f5f5f5;
     --text-dark: #333;
     --text-light: #fff;
+    --border-color: #ddd;
+    --shadow: 0 2px 4px rgba(0,0,0,0.1);
+    --border-radius: 10px;
+    --spacing: 20px;
 }
 
 body {
@@ -25,22 +35,23 @@ body {
 .app-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: var(--spacing);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
+/* Header styles */
 header {
     background: var(--primary-color);
     color: var(--text-light);
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 20px;
+    padding: var(--spacing);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--spacing);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow);
 }
 
 header h1 {
@@ -55,24 +66,37 @@ header h1 {
     border-radius: 20px;
     background: rgba(255,255,255,0.2);
     font-size: 0.9rem;
+    transition: background-color 0.3s ease;
 }
 
+.connection-status.online {
+    background: rgba(76, 175, 80, 0.3);
+}
+
+.connection-status.offline {
+    background: rgba(244, 67, 54, 0.3);
+}
+
+/* Main content */
 main {
     flex: 1;
 }
 
-.auth-section, .tracking-section {
+/* Sections */
+.auth-section, 
+.tracking-section {
     background: white;
     padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: var(--spacing);
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
+/* Button styles */
 .btn {
     padding: 12px 24px;
     border: none;
@@ -81,11 +105,15 @@ main {
     cursor: pointer;
     transition: all 0.3s ease;
     margin: 5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    pointer-events: none;
 }
 
 .btn-primary {
@@ -94,7 +122,9 @@ main {
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: #1976d2;
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
 }
 
 .btn-success {
@@ -103,7 +133,9 @@ main {
 }
 
 .btn-success:hover:not(:disabled) {
-    background: #388e3c;
+    background: var(--secondary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
 }
 
 .btn-danger {
@@ -112,7 +144,9 @@ main {
 }
 
 .btn-danger:hover:not(:disabled) {
-    background: #d32f2f;
+    background: var(--danger-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
 }
 
 .btn-secondary {
@@ -122,8 +156,10 @@ main {
 
 .btn-secondary:hover:not(:disabled) {
     background: #757575;
+    transform: translateY(-2px);
 }
 
+/* Auth forms */
 #emailSignInForm {
     display: flex;
     flex-direction: column;
@@ -133,26 +169,61 @@ main {
 }
 
 #emailSignInForm input {
-    padding: 10px;
-    border: 1px solid #ddd;
+    padding: 12px;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+#emailSignInForm input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
 }
 
 .divider {
     text-align: center;
     margin: 20px 0;
     color: #666;
+    position: relative;
 }
 
+.divider::before,
+.divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 45%;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.divider::before {
+    left: 0;
+}
+
+.divider::after {
+    right: 0;
+}
+
+/* Location permission */
 .location-permission {
     text-align: center;
     padding: 40px;
     background: #e3f2fd;
-    border-radius: 10px;
+    border-radius: var(--border-radius);
     margin-bottom: 20px;
+    border: 2px dashed var(--primary-color);
 }
 
+.location-permission p {
+    margin-bottom: 20px;
+    font-size: 1.1rem;
+    color: var(--primary-dark);
+}
+
+/* Tracking controls */
 .tracking-controls {
     display: flex;
     justify-content: center;
@@ -161,69 +232,219 @@ main {
     flex-wrap: wrap;
 }
 
+/* Location info */
 .location-info {
     background: #f8f9fa;
     padding: 20px;
-    border-radius: 10px;
+    border-radius: var(--border-radius);
     margin-bottom: 20px;
+    border-left: 4px solid var(--primary-color);
 }
 
 .location-info h3 {
     margin-bottom: 15px;
     color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .location-info > div {
-    margin: 5px 0;
+    margin: 8px 0;
     font-size: 1.1rem;
+    padding: 5px 10px;
+    background: white;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
+/* Status indicators */
 .status-warning {
     color: var(--warning-color);
     font-weight: bold;
+    background: #fff3e0 !important;
+    border-left: 3px solid var(--warning-color);
 }
 
 .status-success {
     color: var(--secondary-color);
     font-weight: bold;
+    background: #e8f5e9 !important;
+    border-left: 3px solid var(--secondary-color);
 }
 
 .status-error {
     color: var(--danger-color);
     font-weight: bold;
+    background: #ffebee !important;
+    border-left: 3px solid var(--danger-color);
 }
 
+.status-info {
+    color: var(--primary-color);
+    font-weight: bold;
+    background: #e3f2fd !important;
+    border-left: 3px solid var(--primary-color);
+}
+
+/* Map container */
 .map-container {
     height: 400px;
     margin-bottom: 20px;
-    border-radius: 10px;
+    border-radius: var(--border-radius);
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow);
+    position: relative;
 }
 
 #map {
     height: 100%;
     width: 100%;
+    background: #e8e8e8; /* Fallback color while loading */
 }
 
+/* Map loading state */
+.map-container.loading::after {
+    content: 'Loading map...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,0.9);
+    padding: 10px 20px;
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+}
+
+/* Stats section */
 .stats {
     background: #f8f9fa;
     padding: 20px;
-    border-radius: 10px;
+    border-radius: var(--border-radius);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
 }
 
 .stats h3 {
     margin-bottom: 15px;
     color: var(--primary-color);
+    grid-column: 1 / -1;
 }
 
+.stats > div {
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    text-align: center;
+}
+
+.stats > div::before {
+    display: block;
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+#totalPoints::before {
+    content: '📍';
+    font-size: 1.2rem;
+}
+
+#offlineQueue::before {
+    content: '📱';
+    font-size: 1.2rem;
+}
+
+/* Footer */
 footer {
     text-align: center;
     padding: 20px;
     color: #666;
     font-size: 0.9rem;
+    border-top: 1px solid var(--border-color);
+    margin-top: auto;
 }
 
+/* Loading spinner */
+.spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: white;
+    padding: 15px 25px;
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    animation: slideIn 0.3s ease;
+    border-left: 4px solid var(--primary-color);
+}
+
+.toast.success {
+    border-left-color: var(--secondary-color);
+}
+
+.toast.error {
+    border-left-color: var(--danger-color);
+}
+
+.toast.warning {
+    border-left-color: var(--warning-color);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Geofence status */
+#geofenceStatus {
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.geofence-active {
+    color: var(--secondary-color);
+}
+
+.geofence-warning {
+    color: var(--warning-color);
+}
+
+.geofence-alert {
+    color: var(--danger-color);
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Responsive design */
 @media (max-width: 768px) {
     .app-container {
         padding: 10px;
@@ -235,11 +456,87 @@ footer {
         gap: 10px;
     }
     
+    header h1 {
+        font-size: 1.2rem;
+    }
+    
     .tracking-controls {
         flex-direction: column;
     }
     
     .btn {
         width: 100%;
+        margin: 5px 0;
+    }
+    
+    .location-info > div {
+        font-size: 0.95rem;
+    }
+    
+    .stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .map-container {
+        height: 300px;
+    }
+    
+    .toast {
+        left: 20px;
+        right: 20px;
+        bottom: 10px;
+        text-align: center;
+    }
+}
+
+/* Print styles */
+@media print {
+    header,
+    .tracking-controls,
+    .btn,
+    footer {
+        display: none;
+    }
+    
+    .map-container {
+        height: 300px;
+        page-break-inside: avoid;
+    }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --light-bg: #1a1a1a;
+        --text-dark: #fff;
+        --border-color: #444;
+    }
+    
+    body {
+        background: #1a1a1a;
+    }
+    
+    .auth-section,
+    .tracking-section,
+    .location-info,
+    .stats,
+    .stats > div,
+    .toast {
+        background: #2d2d2d;
+        color: #fff;
+    }
+    
+    .location-info > div {
+        background: #3d3d3d;
+    }
+    
+    #emailSignInForm input {
+        background: #3d3d3d;
+        color: #fff;
+        border-color: #555;
+    }
+    
+    .location-permission {
+        background: #1e3a5f;
     }
 }

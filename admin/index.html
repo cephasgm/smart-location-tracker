@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Smart Location Tracker</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <div class="admin-container">
+        <header>
+            <h1>👤 Admin Dashboard</h1>
+            <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
+        </header>
+
+        <main>
+            <div class="admin-controls">
+                <h2>Live Tracking Dashboard</h2>
+                
+                <div class="user-selector">
+                    <label for="userSelect">Select User:</label>
+                    <select id="userSelect" class="form-control">
+                        <option value="">Choose a user...</option>
+                    </select>
+                </div>
+
+                <div class="date-range">
+                    <label>
+                        <input type="checkbox" id="liveMode" checked> Live Mode
+                    </label>
+                    <div id="historicalControls" style="display: none;">
+                        <input type="date" id="startDate">
+                        <input type="date" id="endDate">
+                        <button id="loadHistoryBtn" class="btn btn-primary">Load History</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-stats">
+                <div class="stat-card">
+                    <h3>Active Users</h3>
+                    <div id="activeUsers">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Locations</h3>
+                    <div id="totalLocations">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Geofences</h3>
+                    <div id="geofenceCount">0</div>
+                </div>
+            </div>
+
+            <div class="admin-map-container">
+                <div id="adminMap"></div>
+            </div>
+
+            <div class="user-locations-list">
+                <h3>User Locations</h3>
+                <div id="userLocationsList"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="../firebase-init.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

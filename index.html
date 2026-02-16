@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Location Tracker - Modern PWA</title>
+    <title>CephasGM Smart Location Tracker - Advanced PWA</title>
     
     <!-- Stylesheets -->
     <link rel="stylesheet" href="styles.css">
@@ -16,6 +16,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Smart Tracker">
     <meta name="format-detection" content="telephone=no">
+    <meta name="application-name" content="Smart Tracker">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     
     <!-- Icons -->
     <link rel="apple-touch-icon" href="icon-192x192.png">
@@ -35,20 +37,31 @@
     
     <!-- Leaflet CSS and Plugins -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.css" crossorigin="anonymous" />
     
     <!-- Chart.js for analytics -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     
     <!-- Favicon - emoji-based to prevent 404 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+    
+    <style>
+        /* Fallback styles in case styles.css hasn't loaded yet */
+        .hidden { display: none !important; }
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-secondary { background: #f093fb; color: white; }
+        .btn-success { background: #84fab0; color: #1a4731; }
+        .btn-danger { background: #f43b47; color: white; }
+    </style>
 </head>
 <body>
     <div class="app-container">
         <header>
-            <h1>📍CephasGM Smart Location Tracker</h1>
+            <h1>📍 CephasGM Smart Location Tracker</h1>
             <div class="header-actions">
                 <div class="connection-status" id="connectionStatus">🟢 Online</div>
                 <button id="signOutBtn" class="btn btn-secondary hidden">Sign Out</button>
@@ -83,22 +96,22 @@
                     <button id="stopTrackingBtn" class="btn btn-danger" disabled>⏹ Stop Tracking</button>
                 </div>
 
-                <!-- NEW: Feature Buttons -->
+                <!-- Feature Buttons -->
                 <div class="feature-buttons">
-                    <button class="btn btn-primary" onclick="navigationEngine.setupRouting(map)">🗺️ Navigate</button>
-                    <button class="btn btn-primary" onclick="locationHistory.playTrip()">📜 History</button>
-                    <button class="btn btn-primary" onclick="socialSharing.showPanel()">📤 Share</button>
-                    <button class="btn btn-primary" onclick="userProfile.showPanel()">👤 Profile</button>
+                    <button class="btn btn-primary" id="navigateBtn">🗺️ Navigate</button>
+                    <button class="btn btn-primary" id="historyBtn">📜 History</button>
+                    <button class="btn btn-primary" id="shareBtn">📤 Share</button>
+                    <button class="btn btn-primary" id="profileBtn">👤 Profile</button>
                 </div>
 
-                <!-- NEW: Search Box for Navigation -->
+                <!-- Search Box for Navigation (initially hidden) -->
                 <div class="search-container" id="searchContainer" style="display: none;">
                     <div class="search-box">
                         <input type="text" id="searchFrom" placeholder="From location...">
                         <input type="text" id="searchTo" placeholder="To destination...">
                         <div class="search-actions">
-                            <button class="btn btn-success" onclick="navigationEngine.calculateRoute()">🚗 Go</button>
-                            <button class="btn btn-secondary" onclick="navigationEngine.clearRoute()">✕ Clear</button>
+                            <button class="btn btn-success" id="goBtn">🚗 Go</button>
+                            <button class="btn btn-secondary" id="clearBtn">✕ Clear</button>
                         </div>
                     </div>
                 </div>
@@ -145,11 +158,13 @@
     <!-- Toast container for notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Third-party libraries -->
+    <!-- Third-party libraries (load first) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
-    <script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js"></script>
-    <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js" crossorigin="anonymous"></script>
+    
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
@@ -159,7 +174,7 @@
     <!-- Sentry for error tracking -->
     <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
     
-    <!-- Core modules -->
+    <!-- ===== CORE MODULES (load in this exact order) ===== -->
     <script src="firebase-init.js"></script>
     <script src="anti-spoof.js"></script>
     <script src="geofence-engine.js"></script>
@@ -167,7 +182,7 @@
     <script src="auth.js"></script>
     <script src="location-engine.js"></script>
     
-    <!-- NEW: Feature Modules -->
+    <!-- ===== FEATURE MODULES ===== -->
     <script src="navigation-engine.js"></script>
     <script src="location-history.js"></script>
     <script src="social-sharing.js"></script>
@@ -175,71 +190,143 @@
     <script src="analytics.js"></script>
     <script src="virtual-scroll.js"></script>
     
-    <!-- Main app -->
+    <!-- ===== MAIN APP (load last) ===== -->
     <script src="app.js"></script>
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration & Install Prompt -->
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/smart-location-tracker/service-worker.js', {
-                    scope: '/smart-location-tracker/'
-                })
-                .then(registration => {
-                    console.log('✅ ServiceWorker registered:', registration.scope);
-                    
-                    // Check for updates
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing;
-                        console.log('🔄 New service worker installing');
+        (function() {
+            'use strict';
+            
+            // Service Worker Registration
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/smart-location-tracker/service-worker.js', {
+                        scope: '/smart-location-tracker/'
+                    })
+                    .then(function(registration) {
+                        console.log('✅ ServiceWorker registered:', registration.scope);
                         
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                // New version available
-                                if (confirm('New version available! Reload to update?')) {
-                                    window.location.reload();
+                        // Check for updates
+                        registration.addEventListener('updatefound', function() {
+                            var newWorker = registration.installing;
+                            console.log('🔄 New service worker installing');
+                            
+                            newWorker.addEventListener('statechange', function() {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New version available - show notification
+                                    if (window.app && window.app.showToast) {
+                                        window.app.showToast('🔄 Update available - refresh to update', 'info');
+                                    } else {
+                                        alert('New version available! Refresh to update.');
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch(function(error) {
+                        console.error('❌ ServiceWorker registration failed:', error);
+                    });
+                });
+
+                // Handle service worker updates
+                var refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    if (!refreshing) {
+                        refreshing = true;
+                        window.location.reload();
+                    }
+                });
+            }
+
+            // Install prompt handler
+            var deferredPrompt;
+            window.addEventListener('beforeinstallprompt', function(e) {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                // Show install button if not already present
+                if (!document.getElementById('installBtn')) {
+                    var installBtn = document.createElement('button');
+                    installBtn.id = 'installBtn';
+                    installBtn.className = 'btn btn-primary';
+                    installBtn.innerHTML = '📱 Install App';
+                    
+                    installBtn.addEventListener('click', function() {
+                        if (!deferredPrompt) return;
+                        
+                        deferredPrompt.prompt();
+                        deferredPrompt.userChoice.then(function(choiceResult) {
+                            if (choiceResult.outcome === 'accepted') {
+                                console.log('✅ User accepted install');
+                                if (window.app && window.app.showToast) {
+                                    window.app.showToast('✅ Thank you for installing!', 'success');
                                 }
                             }
+                            deferredPrompt = null;
                         });
+                        
+                        installBtn.remove();
                     });
-                })
-                .catch(error => {
-                    console.error('❌ ServiceWorker registration failed:', error);
-                });
-            });
-
-            // Handle service worker updates
-            let refreshing = false;
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (!refreshing) {
-                    refreshing = true;
-                    window.location.reload();
+                    
+                    var headerActions = document.querySelector('.header-actions');
+                    if (headerActions) {
+                        headerActions.appendChild(installBtn);
+                    }
                 }
             });
-        }
 
-        // Install prompt handler
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            
-            // Show install button
-            const installBtn = document.createElement('button');
-            installBtn.id = 'installBtn';
-            installBtn.className = 'btn btn-primary';
-            installBtn.innerHTML = '📱 Install App';
-            installBtn.onclick = () => {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {
-                    if (choiceResult.outcome === 'accepted') {
-                        console.log('✅ User accepted install');
+            // App installed
+            window.addEventListener('appinstalled', function() {
+                console.log('✅ PWA installed');
+                var installBtn = document.getElementById('installBtn');
+                if (installBtn) {
+                    installBtn.remove();
+                }
+                if (window.app && window.app.showToast) {
+                    window.app.showToast('🎉 App installed successfully!', 'success');
+                }
+            });
+
+            // Online/Offline detection
+            function updateOnlineStatus() {
+                var statusEl = document.getElementById('connectionStatus');
+                if (statusEl) {
+                    if (navigator.onLine) {
+                        statusEl.innerHTML = '🟢 Online';
+                        statusEl.className = 'connection-status online';
+                    } else {
+                        statusEl.innerHTML = '🔴 Offline';
+                        statusEl.className = 'connection-status offline';
                     }
-                    deferredPrompt = null;
-                });
-            };
-            document.querySelector('.header-actions').appendChild(installBtn);
-        });
+                }
+            }
+
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+            updateOnlineStatus();
+
+            // Debug mode (Ctrl+Shift+D)
+            var debugMode = false;
+            window.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                    debugMode = !debugMode;
+                    var debugEl = document.getElementById('debugInfo');
+                    if (debugEl) {
+                        if (debugMode) {
+                            debugEl.classList.remove('hidden');
+                            console.log('🔧 Debug mode enabled');
+                        } else {
+                            debugEl.classList.add('hidden');
+                            console.log('🔧 Debug mode disabled');
+                        }
+                    }
+                }
+            });
+
+            // Log startup
+            console.log('🚀 Smart Location Tracker v3.0.0 loading...');
+        })();
     </script>
 </body>
 </html>

@@ -1,24 +1,26 @@
 const CACHE_NAME = 'smart-location-tracker-v1';
+const BASE_PATH = '/smart-location-tracker';
+
 const urlsToCache = [
-  '/',
-  '/styles.css',
-  '/manifest.json',
-  '/app.js',
-  '/auth.js',
-  '/location-engine.js',
-  '/anti-spoof.js',
-  '/geofence-engine.js',
-  '/offline-queue.js',
-  '/firebase-init.js',
+  BASE_PATH + '/',
+  BASE_PATH + '/styles.css',
+  BASE_PATH + '/manifest.json',
+  BASE_PATH + '/app.js',
+  BASE_PATH + '/auth.js',
+  BASE_PATH + '/location-engine.js',
+  BASE_PATH + '/anti-spoof.js',
+  BASE_PATH + '/geofence-engine.js',
+  BASE_PATH + '/offline-queue.js',
+  BASE_PATH + '/firebase-init.js',
   // Icons
-  '/icon-72x72.png',
-  '/icon-96x96.png',
-  '/icon-128x128.png',
-  '/icon-144x144.png',
-  '/icon-152x152.png',
-  '/icon-192x192.png',
-  '/icon-384x384.png',
-  '/icon-512x512.png',
+  BASE_PATH + '/icon-72x72.png',
+  BASE_PATH + '/icon-96x96.png',
+  BASE_PATH + '/icon-128x128.png',
+  BASE_PATH + '/icon-144x144.png',
+  BASE_PATH + '/icon-152x152.png',
+  BASE_PATH + '/icon-192x192.png',
+  BASE_PATH + '/icon-384x384.png',
+  BASE_PATH + '/icon-512x512.png',
   // External resources
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
@@ -29,15 +31,12 @@ const urlsToCache = [
 
 self.addEventListener('install', event => {
   console.log('🔄 Service Worker installing...');
-  
-  // Skip waiting to activate immediately
   self.skipWaiting();
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('📦 Caching app resources');
-        // Cache one by one to avoid failing all if one fails
         return Promise.allSettled(
           urlsToCache.map(url => 
             cache.add(url).catch(error => {
@@ -51,9 +50,6 @@ self.addEventListener('install', event => {
         const succeeded = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.filter(r => r.status === 'rejected').length;
         console.log(`✅ Caching complete: ${succeeded} succeeded, ${failed} failed`);
-      })
-      .catch(error => {
-        console.error('❌ Caching failed:', error);
       })
   );
 });
@@ -70,21 +66,12 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    }).then(() => {
-      // Claim clients to take control immediately
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', event => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin) && 
-      !event.request.url.includes('unpkg.com') && 
-      !event.request.url.includes('gstatic.com')) {
-    return;
-  }
-
+  // Handle requests
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -92,26 +79,29 @@ self.addEventListener('fetch', event => {
           return response;
         }
         
-        return fetch(event.request).then(response => {
-          // Don't cache non-successful responses
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+        return fetch(event.request)
+          .then(response => {
+            // Don't cache non-successful responses
+            if (!response || response.status !== 200) {
+              return response;
+            }
+
+            // Cache successful responses
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+
             return response;
-          }
-
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, responseToCache);
-            })
-            .catch(err => console.warn('Failed to cache response:', err));
-
-          return response;
-        });
-      })
-      .catch(error => {
-        console.warn('Fetch failed:', error);
-        // You could return a fallback offline page here
-        return new Response('Offline - Content not available');
+          })
+          .catch(() => {
+            // Return offline fallback for navigation requests
+            if (event.request.mode === 'navigate') {
+              return caches.match(BASE_PATH + '/');
+            }
+            return new Response('Offline');
+          });
       })
   );
 });

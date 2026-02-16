@@ -17,7 +17,7 @@ let storage = null;
 let analytics = null;
 
 try {
-    // Initialize Firebase
+    // Check if Firebase is already initialized
     if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
     }
@@ -56,21 +56,15 @@ try {
         storage = firebase.storage();
     }
     
-    // Initialize Analytics if available
+    // Initialize Analytics if available (with try-catch for ad-blockers)
     if (firebase.analytics) {
         try {
             analytics = firebase.analytics();
-            // FIXED: Test analytics and handle ad-blockers gracefully
-            analytics.logEvent('test_event', { test: true })
-                .then(() => {
-                    console.log('✅ Firebase Analytics initialized');
-                })
-                .catch((e) => {
-                    console.log('📊 Analytics unavailable (likely ad-blocker)');
-                    analytics = null;
-                });
+            // Test analytics with a simple event
+            analytics.logEvent('app_start', { timestamp: Date.now() });
+            console.log('✅ Firebase Analytics initialized');
         } catch (e) {
-            console.log('📊 Analytics initialization failed (ad-blocker detected)');
+            console.log('📊 Analytics unavailable (likely ad-blocker)');
             analytics = null;
         }
     } else {
@@ -104,8 +98,3 @@ console.log('📊 Firebase Services Status:', {
     analytics: !!analytics,
     initialized: firebaseInitialized
 });
-
-// Export for module usage if needed
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = firebaseServices;
-}

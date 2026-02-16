@@ -9,37 +9,100 @@ const firebaseConfig = {
     measurementId: "G-HDKF5K5RJM"
 };
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+// Initialize Firebase with error handling
+let firebaseInitialized = false;
+
+try {
+    // Check if Firebase is already initialized
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    } else {
+        firebase.app(); // Use existing app
+    }
+    firebaseInitialized = true;
+    console.log('✅ Firebase initialized successfully');
+} catch (error) {
+    console.error('❌ Firebase initialization failed:', error);
+}
 
 // Initialize services
-const auth = firebase.auth();
-const db = firebase.firestore();
+let auth = null;
+let db = null;
+let storage = null;
+let analytics = null;
 
-// Fix: Don't use both synchronizeTabs and experimentalForceOwningTab together
-db.enablePersistence({
-    synchronizeTabs: true  // Just use this one
-})
-    .then(() => {
-        console.log('Offline persistence enabled');
-    })
-    .catch((err) => {
-        if (err.code === 'failed-precondition') {
-            console.warn('Persistence failed: Multiple tabs open, persistence enabled in first tab only');
-        } else if (err.code === 'unimplemented') {
-            console.warn('Browser doesn\'t support persistence');
-        } else {
-            console.error('Persistence error:', err);
+if (firebaseInitialized) {
+    try {
+        auth = firebase.auth();
+        db = firebase.firestore();
+        
+        // Initialize Storage if available
+        if (firebase.storage) {
+            storage = firebase.storage();
         }
-    });
+        
+        // Initialize Analytics if available
+        if (firebase.analytics) {
+            analytics = firebase.analytics();
+        }
+
+        // Enable offline persistence with modern settings
+        db.enablePersistence({
+            synchronizeTabs: true,
+            experimentalForceOwningTab: false
+        })
+            .then(() => {
+                console.log('✅ Offline persistence enabled');
+            })
+            .catch((err) => {
+                if (err.code === 'failed-precondition') {
+                    console.warn('⚠️ Multiple tabs open - persistence enabled in first tab only');
+                } else if (err.code === 'unimplemented') {
+                    console.warn('⚠️ Browser does not support persistence');
+                } else {
+                    console.error('❌ Persistence error:', err);
+                }
+            });
+
+        // Set up Firestore settings
+        db.settings({
+            cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+            ignoreUndefinedProperties: true,
+            merge: true
+        });
+
+        // Enable logging in development
+        if (window.location.hostname === 'localhost') {
+            firebase.firestore.setLogLevel('debug');
+        }
+
+    } catch (error) {
+        console.error('❌ Firebase services initialization failed:', error);
+    }
+}
 
 // Create global services object
 const firebaseServices = {
     auth,
-    db
+    db,
+    storage,
+    analytics,
+    isInitialized: firebaseInitialized
 };
 
 // Make it globally available
 window.firebaseServices = firebaseServices;
 
-console.log('✅ Firebase initialized successfully');
+// Export for module usage if needed
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = firebaseServices;
+}
+
+// Log status
+console.log('📊 Firebase Services Status:', {
+    auth: !!auth,
+    db: !!db,
+    storage: !!storage,
+    analytics: !!analytics,
+    initialized: firebaseInitialized
+});

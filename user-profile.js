@@ -1,10 +1,11 @@
-// user-profile.js - Professional user profiles with avatars
+// user-profile.js - Professional user profiles with avatars - v3.0.0
 
 class UserProfile {
     constructor() {
         this.currentUser = null;
         this.profile = null;
         this.avatarFile = null;
+        this.initialized = false;
         this.preferences = {
             units: 'metric',
             theme: 'auto',
@@ -18,12 +19,20 @@ class UserProfile {
     }
 
     async init() {
-        await this.loadUserProfile();
-        this.createProfileUI();
-        this.initEventListeners();
+        try {
+            await this.loadUserProfile();
+            this.createProfileUI();
+            this.initEventListeners();
+            this.initialized = true;
+        } catch (error) {
+            console.error('Failed to initialize UserProfile:', error);
+        }
     }
 
     async loadUserProfile() {
+        // Wait for auth manager to be ready
+        await this.waitForAuth();
+        
         if (!window.authManager || !window.authManager.currentUser) {
             console.log('No user logged in');
             return;
@@ -37,55 +46,118 @@ class UserProfile {
 
             if (doc.exists) {
                 this.profile = doc.data();
+                // Merge preferences
+                this.preferences = { ...this.preferences, ...this.profile.preferences };
             } else {
-                // Create default profile
-                this.profile = {
-                    uid: this.currentUser.uid,
-                    displayName: this.currentUser.email || 'Anonymous User',
-                    email: this.currentUser.email,
-                    photoURL: this.currentUser.photoURL || '/default-avatar.png',
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-                    preferences: this.preferences,
-                    stats: {
-                        totalTrips: 0,
-                        totalDistance: 0,
-                        totalDuration: 0,
-                        achievements: []
-                    },
-                    friends: [],
-                    blockedUsers: []
-                };
-
-                await db.collection('users').doc(this.currentUser.uid).set(this.profile);
+                await this.createDefaultProfile();
+            }
+            
+            // Track in analytics
+            if (window.analytics) {
+                window.analytics.setUserProperties({
+                    userId: this.currentUser.uid,
+                    hasProfile: true
+                });
             }
         } catch (error) {
             console.error('Failed to load user profile:', error);
+            this.showToast('Failed to load profile', 'error');
         }
     }
 
+    waitForAuth() {
+        return new Promise((resolve) => {
+            if (window.authManager && window.authManager.currentUser) {
+                resolve();
+            } else {
+                const checkInterval = setInterval(() => {
+                    if (window.authManager && window.authManager.currentUser) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+                
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    clearInterval(checkInterval);
+                    resolve();
+                }, 5000);
+            }
+        });
+    }
+
+    async createDefaultProfile() {
+        try {
+            this.profile = {
+                uid: this.currentUser.uid,
+                displayName: this.currentUser.email ? this.currentUser.email.split('@')[0] : 'Anonymous User',
+                email: this.currentUser.email || '',
+                photoURL: this.currentUser.photoURL || this.getGravatarUrl(this.currentUser.email),
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                preferences: this.preferences,
+                stats: {
+                    totalTrips: 0,
+                    totalDistance: 0,
+                    totalDuration: 0,
+                    achievements: []
+                },
+                friends: [],
+                blockedUsers: []
+            };
+
+            const db = window.firebaseServices.db;
+            await db.collection('users').doc(this.currentUser.uid).set(this.profile);
+            console.log('✅ Default profile created');
+        } catch (error) {
+            console.error('Failed to create default profile:', error);
+        }
+    }
+
+    getGravatarUrl(email) {
+        const hash = email ? this.md5(email.trim().toLowerCase()) : 'default';
+        return `https://www.gravatar.com/avatar/${hash}?d=mp&s=200`;
+    }
+
+    md5(string) {
+        // Simple MD5 implementation for gravatar
+        let hash = 0;
+        for (let i = 0; i < string.length; i++) {
+            const char = string.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(16);
+    }
+
     createProfileUI() {
+        // Remove existing panel if any
+        const existingPanel = document.getElementById('profilePanel');
+        if (existingPanel) {
+            existingPanel.remove();
+        }
+
         const profilePanel = document.createElement('div');
         profilePanel.className = 'profile-panel';
         profilePanel.id = 'profilePanel';
         profilePanel.innerHTML = `
             <div class="profile-header">
                 <h4>👤 User Profile</h4>
-                <button class="close-btn" onclick="document.getElementById('profilePanel').classList.remove('active')">✕</button>
+                <button class="close-btn" id="closeProfileBtn">✕</button>
             </div>
             
             <div class="profile-avatar-section">
                 <div class="avatar-container">
-                    <img id="profileAvatar" src="${this.profile?.photoURL || '/default-avatar.png'}" alt="Avatar">
-                    <div class="avatar-overlay" onclick="userProfile.changeAvatar()">
+                    <img id="profileAvatar" src="${this.profile?.photoURL || '/default-avatar.png'}" alt="Avatar" onerror="this.src='/default-avatar.png'">
+                    <div class="avatar-overlay" id="changeAvatarBtn">
                         <span>📷 Change</span>
                     </div>
                 </div>
                 <div class="avatar-controls">
-                    <button class="btn-upload" onclick="document.getElementById('avatarInput').click()">
+                    <button class="btn-upload" id="uploadAvatarBtn">
                         Upload Photo
                     </button>
-                    <button class="btn-generate" onclick="userProfile.generateAvatar()">
+                    <button class="btn-generate" id="generateAvatarBtn">
                         🎨 Generate Avatar
                     </button>
                 </div>
@@ -174,8 +246,8 @@ class UserProfile {
             </div>
 
             <div class="profile-actions">
-                <button class="btn-save" onclick="userProfile.saveProfile()">💾 Save Changes</button>
-                <button class="btn-danger" onclick="userProfile.deleteAccount()">⚠️ Delete Account</button>
+                <button class="btn-save" id="saveProfileBtn">💾 Save Changes</button>
+                <button class="btn-danger" id="deleteAccountBtn">⚠️ Delete Account</button>
             </div>
         `;
 
@@ -183,9 +255,49 @@ class UserProfile {
     }
 
     initEventListeners() {
-        // Avatar upload
+        // Close button
+        document.getElementById('closeProfileBtn')?.addEventListener('click', () => {
+            this.hidePanel();
+        });
+
+        // Upload avatar button
+        document.getElementById('uploadAvatarBtn')?.addEventListener('click', () => {
+            document.getElementById('avatarInput').click();
+        });
+
+        // Generate avatar button
+        document.getElementById('generateAvatarBtn')?.addEventListener('click', () => {
+            this.generateAvatar();
+        });
+
+        // Avatar input change
         document.getElementById('avatarInput')?.addEventListener('change', (e) => {
             this.handleAvatarUpload(e.target.files[0]);
+        });
+
+        // Change avatar overlay
+        document.getElementById('changeAvatarBtn')?.addEventListener('click', () => {
+            document.getElementById('avatarInput').click();
+        });
+
+        // Save profile
+        document.getElementById('saveProfileBtn')?.addEventListener('click', () => {
+            this.saveProfile();
+        });
+
+        // Delete account
+        document.getElementById('deleteAccountBtn')?.addEventListener('click', () => {
+            this.deleteAccount();
+        });
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('profilePanel');
+            if (panel && panel.classList.contains('active') && 
+                !panel.contains(e.target) && 
+                !e.target.closest('.btn-primary')?.textContent.includes('Profile')) {
+                this.hidePanel();
+            }
         });
     }
 
@@ -223,7 +335,11 @@ class UserProfile {
             // Compress image
             const compressedFile = await this.compressImage(file);
 
-            // Upload to Firebase Storage
+            // Check if Firebase Storage is available
+            if (!firebase.storage) {
+                throw new Error('Firebase Storage not available');
+            }
+
             const storage = firebase.storage();
             const ref = storage.ref(`avatars/${this.currentUser.uid}`);
             await ref.put(compressedFile);
@@ -242,9 +358,14 @@ class UserProfile {
             });
 
             this.showToast('✅ Avatar uploaded successfully');
+            
+            // Track in analytics
+            if (window.analytics) {
+                window.analytics.trackEvent('avatar_uploaded');
+            }
         } catch (error) {
             console.error('Upload failed:', error);
-            this.showToast('❌ Failed to upload avatar', 'error');
+            this.showToast('❌ Failed to upload avatar: ' + error.message, 'error');
         }
     }
 
@@ -288,12 +409,14 @@ class UserProfile {
     }
 
     async generateAvatar() {
-        // Generate random avatar using DiceBear API
-        const seed = this.currentUser?.uid || Math.random().toString(36);
-        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
-
-        // Convert SVG to PNG
         try {
+            this.showToast('🎨 Generating avatar...', 'info');
+
+            // Generate random avatar using DiceBear API
+            const seed = this.currentUser?.uid || Math.random().toString(36);
+            const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+
+            // Convert SVG to PNG
             const response = await fetch(avatarUrl);
             const svg = await response.text();
 
@@ -301,33 +424,38 @@ class UserProfile {
             const ctx = canvas.getContext('2d');
             const img = new Image();
 
-            img.onload = async () => {
-                canvas.width = 200;
-                canvas.height = 200;
-                ctx.drawImage(img, 0, 0, 200, 200);
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+            });
 
-                canvas.toBlob(async (blob) => {
-                    await this.uploadAvatar(blob);
-                }, 'image/png');
-            };
+            canvas.width = 200;
+            canvas.height = 200;
+            ctx.drawImage(img, 0, 0, 200, 200);
 
-            img.src = 'data:image/svg+xml;base64,' + btoa(svg);
+            const blob = await new Promise((resolve) => {
+                canvas.toBlob(resolve, 'image/png');
+            });
+
+            await this.uploadAvatar(blob);
         } catch (error) {
             console.error('Avatar generation failed:', error);
+            this.showToast('❌ Failed to generate avatar', 'error');
         }
     }
 
     async saveProfile() {
         try {
             const updates = {
-                displayName: document.getElementById('displayName')?.value,
-                bio: document.getElementById('bio')?.value,
-                location: document.getElementById('location')?.value,
+                displayName: document.getElementById('displayName')?.value || '',
+                bio: document.getElementById('bio')?.value || '',
+                location: document.getElementById('location')?.value || '',
                 preferences: {
-                    units: document.getElementById('units')?.value,
-                    theme: document.getElementById('theme')?.value,
-                    privacy: document.getElementById('privacy')?.value,
-                    notifications: document.getElementById('notifications')?.checked,
+                    units: document.getElementById('units')?.value || 'metric',
+                    theme: document.getElementById('theme')?.value || 'auto',
+                    privacy: document.getElementById('privacy')?.value || 'friends',
+                    notifications: document.getElementById('notifications')?.checked || false,
                     language: this.preferences.language
                 },
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -337,14 +465,21 @@ class UserProfile {
             await db.collection('users').doc(this.currentUser.uid).update(updates);
 
             this.profile = { ...this.profile, ...updates };
+            this.preferences = updates.preferences;
+            
             this.showToast('✅ Profile saved successfully');
 
             // Apply theme
             this.applyTheme(updates.preferences.theme);
 
+            // Track in analytics
+            if (window.analytics) {
+                window.analytics.trackEvent('profile_updated');
+            }
+
         } catch (error) {
             console.error('Save failed:', error);
-            this.showToast('❌ Failed to save profile', 'error');
+            this.showToast('❌ Failed to save profile: ' + error.message, 'error');
         }
     }
 
@@ -357,7 +492,12 @@ class UserProfile {
     }
 
     async deleteAccount() {
-        if (!confirm('Are you sure you want to delete your account? This action cannot be undone!')) {
+        if (!confirm('⚠️ Are you sure you want to delete your account?\n\nThis action cannot be undone! All your data will be permanently deleted.')) {
+            return;
+        }
+
+        // Double confirm
+        if (!confirm('This is your final warning! Deleting your account will remove all your trips, geofences, and profile data. Continue?')) {
             return;
         }
 
@@ -368,61 +508,102 @@ class UserProfile {
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).delete();
 
+            // Delete all user locations
+            const locations = await db.collection('locations').where('userId', '==', this.currentUser.uid).get();
+            const batch = db.batch();
+            locations.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // Delete all user geofences
+            const geofences = await db.collection('geofences').where('userId', '==', this.currentUser.uid).get();
+            const geofenceBatch = db.batch();
+            geofences.docs.forEach(doc => {
+                geofenceBatch.delete(doc.ref);
+            });
+            await geofenceBatch.commit();
+
             // Delete avatar from Storage
-            const storage = firebase.storage();
-            const ref = storage.ref(`avatars/${this.currentUser.uid}`);
-            await ref.delete().catch(() => {}); // Ignore if no avatar
+            if (firebase.storage) {
+                const storage = firebase.storage();
+                const ref = storage.ref(`avatars/${this.currentUser.uid}`);
+                await ref.delete().catch(() => {}); // Ignore if no avatar
+            }
 
             // Delete user from Firebase Auth
             await this.currentUser.delete();
 
             this.showToast('✅ Account deleted');
-            window.location.reload();
+            
+            // Track in analytics
+            if (window.analytics) {
+                window.analytics.trackEvent('account_deleted');
+            }
+
+            // Redirect to home
+            setTimeout(() => {
+                window.location.href = '/smart-location-tracker/';
+            }, 1500);
 
         } catch (error) {
             console.error('Delete failed:', error);
-            this.showToast('❌ Failed to delete account', 'error');
+            this.showToast('❌ Failed to delete account: ' + error.message, 'error');
         }
     }
 
     async updateStats() {
         if (!this.currentUser || !window.locationHistory) return;
 
-        const trips = window.locationHistory.trips;
-        const stats = {
-            totalTrips: trips.length,
-            totalDistance: trips.reduce((sum, t) => sum + t.distance, 0),
-            totalDuration: trips.reduce((sum, t) => sum + t.duration, 0)
-        };
-
-        // Check for achievements
-        const achievements = [];
-
-        if (stats.totalTrips >= 1) achievements.push('first_trip');
-        if (stats.totalTrips >= 10) achievements.push('explorer');
-        if (stats.totalTrips >= 50) achievements.push('adventurer');
-        if (stats.totalDistance >= 100000) achievements.push('marathoner');
-        if (stats.totalDistance >= 1000000) achievements.push('globetrotter');
-
-        stats.achievements = achievements;
-
         try {
+            const trips = window.locationHistory.trips || [];
+            const stats = {
+                totalTrips: trips.length,
+                totalDistance: trips.reduce((sum, t) => sum + (t.distance || 0), 0),
+                totalDuration: trips.reduce((sum, t) => sum + (t.duration || 0), 0)
+            };
+
+            // Check for achievements
+            const achievements = [];
+
+            if (stats.totalTrips >= 1) achievements.push('first_trip');
+            if (stats.totalTrips >= 10) achievements.push('explorer');
+            if (stats.totalTrips >= 50) achievements.push('adventurer');
+            if (stats.totalDistance >= 100000) achievements.push('marathoner');
+            if (stats.totalDistance >= 1000000) achievements.push('globetrotter');
+            if (stats.totalDuration >= 3600) achievements.push('time_traveler'); // 1 hour
+            if (stats.totalDuration >= 86400) achievements.push('day_tripper'); // 24 hours
+
+            stats.achievements = achievements;
+
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).update({ stats });
+            
             this.updateStatsUI(stats);
+            
+            if (this.profile) {
+                this.profile.stats = stats;
+            }
         } catch (error) {
             console.error('Failed to update stats:', error);
         }
     }
 
     updateStatsUI(stats) {
-        document.getElementById('statTrips').textContent = stats.totalTrips;
-        document.getElementById('statDistance').textContent = this.formatDistance(stats.totalDistance);
-        document.getElementById('statTime').textContent = this.formatDuration(stats.totalDuration);
-        document.getElementById('statAchievements').textContent = stats.achievements?.length || 0;
+        const tripsEl = document.getElementById('statTrips');
+        const distanceEl = document.getElementById('statDistance');
+        const timeEl = document.getElementById('statTime');
+        const achievementsEl = document.getElementById('statAchievements');
+
+        if (tripsEl) tripsEl.textContent = stats.totalTrips;
+        if (distanceEl) distanceEl.textContent = this.formatDistance(stats.totalDistance);
+        if (timeEl) timeEl.textContent = this.formatDuration(stats.totalDuration);
+        if (achievementsEl) achievementsEl.textContent = stats.achievements?.length || 0;
     }
 
     formatDistance(meters) {
+        if (!meters && meters !== 0) return '0 m';
+        
         if (this.preferences.units === 'metric') {
             return meters > 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
         } else {
@@ -432,29 +613,53 @@ class UserProfile {
     }
 
     formatDuration(seconds) {
+        if (!seconds && seconds !== 0) return '0s';
+        
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
 
         if (hours > 0) {
             return `${hours}h ${minutes}m`;
         } else if (minutes > 0) {
-            return `${minutes}m`;
+            return `${minutes}m ${secs}s`;
         }
-        return `${Math.floor(seconds)}s`;
+        return `${secs}s`;
     }
 
     showPanel() {
-        document.getElementById('profilePanel').classList.add('active');
-        this.updateStats();
+        const panel = document.getElementById('profilePanel');
+        if (panel) {
+            panel.classList.add('active');
+            this.updateStats();
+        }
+    }
+
+    hidePanel() {
+        const panel = document.getElementById('profilePanel');
+        if (panel) {
+            panel.classList.remove('active');
+        }
     }
 
     showToast(message, type = 'success') {
-        if (window.app && window.app.showToast) {
+        if (window.app && typeof window.app.showToast === 'function') {
             window.app.showToast(message, type);
+        } else {
+            console.log(`Toast (${type}): ${message}`);
         }
     }
 }
 
-// Initialize user profile
-const userProfile = new UserProfile();
-window.userProfile = userProfile;
+// Initialize user profile when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit for auth to initialize
+    setTimeout(() => {
+        if (!window.userProfile) {
+            window.userProfile = new UserProfile();
+        }
+    }, 1000);
+});
+
+// Make it globally available
+window.UserProfile = UserProfile;

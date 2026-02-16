@@ -1,5 +1,5 @@
 const CACHE_NAME = 'smart-location-tracker-v1';
-const BASE_PATH = '/smart-location-tracker/';
+const BASE_PATH = '/';  // Changed from '/smart-location-tracker/'
 
 const urlsToCache = [
   BASE_PATH,

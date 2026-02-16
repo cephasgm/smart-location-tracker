@@ -1,5 +1,5 @@
 // navigation-engine.js - Professional route planning with Bolt/Google Maps style navigation
-// Version 2.1.0 - FIXED: Added useDemo:false to suppress OSRM warning
+// Version 2.2.0 - FIXED: Search functionality and route calculation
 
 class NavigationEngine {
     constructor() {
@@ -51,45 +51,51 @@ class NavigationEngine {
     setupRouting(map) {
         this.map = map;
         
-        // FIXED: Added useDemo:false to suppress OSRM warning
-        this.routingControl = L.Routing.control({
-            waypoints: [],
-            router: L.Routing.osrmv1({
-                serviceUrl: 'https://router.project-osrm.org/route/v1',
-                profile: 'driving',
-                alternatives: 2,
-                steps: true,
-                geometries: 'polyline',
-                overview: 'full',
-                annotations: true,
-                useDemo: false // This suppresses the warning
-            }),
-            routeWhileDragging: true,
-            showAlternatives: true,
-            fitSelectedRoutes: true,
-            show: true,
-            collapsible: true,
-            lineOptions: {
-                styles: [
-                    {color: '#2196f3', opacity: 0.8, weight: 6},
-                    {color: '#4caf50', opacity: 0.6, weight: 4, dashArray: '10, 10'}
-                ],
-                addWaypoints: true,
-                extendToWaypoints: true,
-                missingRouteTolerance: 10
-            },
-            createMarker: (i, waypoint, n) => this.createCustomMarker(i, waypoint, n),
-            geocoder: L.Control.Geocoder.nominatim({
-                geocodingQueryParams: {
-                    limit: 10
-                }
-            })
-        }).addTo(this.map);
+        try {
+            // FIXED: Added useDemo:false to suppress OSRM warning
+            this.routingControl = L.Routing.control({
+                waypoints: [],
+                router: L.Routing.osrmv1({
+                    serviceUrl: 'https://router.project-osrm.org/route/v1',
+                    profile: 'driving',
+                    alternatives: 2,
+                    steps: true,
+                    geometries: 'polyline',
+                    overview: 'full',
+                    annotations: true,
+                    useDemo: false // This suppresses the warning
+                }),
+                routeWhileDragging: true,
+                showAlternatives: true,
+                fitSelectedRoutes: true,
+                show: true,
+                collapsible: true,
+                lineOptions: {
+                    styles: [
+                        {color: '#2196f3', opacity: 0.8, weight: 6},
+                        {color: '#4caf50', opacity: 0.6, weight: 4, dashArray: '10, 10'}
+                    ],
+                    addWaypoints: true,
+                    extendToWaypoints: true,
+                    missingRouteTolerance: 10
+                },
+                createMarker: (i, waypoint, n) => this.createCustomMarker(i, waypoint, n),
+                geocoder: L.Control.Geocoder.nominatim({
+                    geocodingQueryParams: {
+                        limit: 10
+                    }
+                })
+            }).addTo(this.map);
 
-        // Add route listeners
-        this.routingControl.on('routeselected', (e) => this.onRouteSelected(e));
-        this.routingControl.on('routesfound', (e) => this.onRoutesFound(e));
-        this.routingControl.on('waypointschanged', (e) => this.onWaypointsChanged(e));
+            // Add route listeners
+            this.routingControl.on('routeselected', (e) => this.onRouteSelected(e));
+            this.routingControl.on('routesfound', (e) => this.onRoutesFound(e));
+            this.routingControl.on('waypointschanged', (e) => this.onWaypointsChanged(e));
+
+            console.log('✅ Routing control initialized');
+        } catch (error) {
+            console.error('Failed to setup routing:', error);
+        }
     }
 
     createCustomMarker(i, waypoint, n) {
@@ -375,12 +381,24 @@ class NavigationEngine {
     }
 
     async searchLocation(query) {
+        if (!query || query.trim() === '') {
+            this.showError('Please enter a location');
+            return [];
+        }
+
         try {
+            this.showToast(`🔍 Searching for "${query}"...`, 'info');
+            
             const response = await fetch(
                 `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`
             );
             
             const results = await response.json();
+            
+            if (results.length === 0) {
+                this.showError('No locations found');
+                return [];
+            }
             
             return results.map(result => ({
                 name: result.display_name,
@@ -391,29 +409,46 @@ class NavigationEngine {
             }));
         } catch (error) {
             console.error('Location search failed:', error);
+            this.showError('Search failed. Please try again.');
             return [];
         }
     }
 
+    // FIXED: searchAndRoute method with better error handling
     async searchAndRoute(from, to) {
+        if (!from || !to) {
+            this.showError('Please enter both start and destination');
+            return;
+        }
+
         try {
+            this.showToast('🔍 Searching for locations...', 'info');
+            
             const fromResults = await this.searchLocation(from);
             const toResults = await this.searchLocation(to);
             
-            if (fromResults.length > 0 && toResults.length > 0) {
-                const start = {
-                    lat: fromResults[0].lat,
-                    lng: fromResults[0].lng
-                };
-                const end = {
-                    lat: toResults[0].lat,
-                    lng: toResults[0].lng
-                };
-                
-                await this.setRoute(start, end);
-            } else {
-                this.showError('Location not found');
+            if (fromResults.length === 0) {
+                this.showError(`Could not find: ${from}`);
+                return;
             }
+            
+            if (toResults.length === 0) {
+                this.showError(`Could not find: ${to}`);
+                return;
+            }
+            
+            const start = {
+                lat: fromResults[0].lat,
+                lng: fromResults[0].lng
+            };
+            const end = {
+                lat: toResults[0].lat,
+                lng: toResults[0].lng
+            };
+            
+            this.showToast(`📍 Route found! Calculating...`, 'success');
+            await this.setRoute(start, end);
+            
         } catch (error) {
             console.error('Search and route failed:', error);
             this.showError('Failed to calculate route');
@@ -425,6 +460,16 @@ class NavigationEngine {
             this.routingControl.setWaypoints([]);
         }
         this.stopNavigation();
+        
+        // Hide search container
+        const searchContainer = document.getElementById('searchContainer');
+        if (searchContainer) {
+            searchContainer.style.display = 'none';
+        }
+        
+        // Clear input fields
+        document.getElementById('searchFrom').value = '';
+        document.getElementById('searchTo').value = '';
     }
 
     addWaypoint(lat, lng) {
@@ -443,8 +488,10 @@ class NavigationEngine {
         if (this.trafficLayer && this.map) {
             if (this.map.hasLayer(this.trafficLayer)) {
                 this.map.removeLayer(this.trafficLayer);
+                this.showToast('🚦 Traffic layer hidden', 'info');
             } else {
                 this.trafficLayer.addTo(this.map);
+                this.showToast('🚦 Traffic layer visible', 'success');
             }
         }
     }
@@ -452,15 +499,20 @@ class NavigationEngine {
     toggleVoiceGuidance() {
         this.voiceGuidance = !this.voiceGuidance;
         this.speak(this.voiceGuidance ? 'Voice guidance on' : 'Voice guidance off');
+        this.showToast(`🔊 Voice guidance ${this.voiceGuidance ? 'enabled' : 'disabled'}`, 'info');
     }
 
     speak(message) {
         if (this.voiceEnabled && this.voiceGuidance && this.speech) {
-            const utterance = new SpeechSynthesisUtterance(message);
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
-            utterance.volume = 1;
-            this.speech.speak(utterance);
+            try {
+                const utterance = new SpeechSynthesisUtterance(message);
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                utterance.volume = 1;
+                this.speech.speak(utterance);
+            } catch (error) {
+                console.warn('Speech synthesis failed:', error);
+            }
         }
     }
 
@@ -510,7 +562,13 @@ class NavigationEngine {
         if (window.app && window.app.showToast) {
             window.app.showToast(message, 'error');
         } else {
-            console.error('Navigation error:', message);
+            alert(message);
+        }
+    }
+
+    showToast(message, type = 'success') {
+        if (window.app && window.app.showToast) {
+            window.app.showToast(message, type);
         }
     }
 

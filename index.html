@@ -4,15 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Location Tracker</title>
+    
+    <!-- Stylesheets -->
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
+    
+    <!-- Meta tags for PWA -->
     <meta name="theme-color" content="#2196f3">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Smart Tracker">
+    <meta name="format-detection" content="telephone=no">
+    
+    <!-- Apple Touch Icon -->
     <link rel="apple-touch-icon" href="icon-192x192.png">
+    
+    <!-- Favicon fallback - emoji-based favicon to prevent 404 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+    
+    <!-- Standard favicon links with multiple sizes -->
+    <link rel="shortcut icon" href="icon-72x72.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icon-72x72.png">
+    <link rel="icon" type="image/png" sizes="72x72" href="icon-72x72.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="icon-96x96.png">
+    <link rel="icon" type="image/png" sizes="128x128" href="icon-128x128.png">
+    <link rel="icon" type="image/png" sizes="144x144" href="icon-144x144.png">
+    <link rel="icon" type="image/png" sizes="152x152" href="icon-152x152.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="384x384" href="icon-384x384.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512x512.png">
+    
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileColor" content="#2196f3">
+    <meta name="msapplication-TileImage" content="icon-192x192.png">
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="styles.css" as="style">
+    <link rel="preload" href="icon-192x192.png" as="image">
 </head>
 <body>
     <div class="app-container">
@@ -22,6 +54,7 @@
         </header>
 
         <main>
+            <!-- Authentication Section -->
             <div class="auth-section" id="authSection">
                 <h2>Authentication</h2>
                 <button id="anonymousSignIn" class="btn btn-primary">Continue Anonymously</button>
@@ -31,58 +64,178 @@
                     <input type="password" id="password" placeholder="Password" required>
                     <button type="submit" class="btn btn-secondary">Sign In with Email</button>
                 </form>
+                <div id="authError" class="status-error hidden"></div>
             </div>
 
+            <!-- Tracking Section (initially hidden) -->
             <div class="tracking-section hidden" id="trackingSection">
+                <!-- Location Permission Request -->
                 <div class="location-permission" id="locationPermission">
                     <p>We need your permission to track your location</p>
                     <button id="requestLocationBtn" class="btn btn-primary">Enable Location Tracking</button>
                 </div>
 
+                <!-- Tracking Controls -->
                 <div class="tracking-controls">
                     <button id="startTrackingBtn" class="btn btn-success" disabled>Start Tracking</button>
                     <button id="stopTrackingBtn" class="btn btn-danger" disabled>Stop Tracking</button>
                 </div>
 
+                <!-- Location Information Display -->
                 <div class="location-info">
-                    <h3>Current Location</h3>
-                    <div id="locationStatus" class="status-warning">Waiting for GPS...</div>
-                    <div id="coordinates">Lat: --, Lng: --</div>
-                    <div id="accuracy">Accuracy: -- m</div>
+                    <h3>📍 Current Location</h3>
+                    <div id="locationStatus" class="status-warning">Waiting for GPS signal...</div>
+                    <div id="coordinates">Latitude: --, Longitude: --</div>
+                    <div id="accuracy">Accuracy: -- meters</div>
+                    <div id="altitude">Altitude: -- meters</div>
+                    <div id="speed">Speed: -- m/s</div>
                     <div id="timestamp">Last update: --</div>
-                    <div id="geofenceStatus"></div>
+                    <div id="geofenceStatus" class="status-info">No geofence active</div>
                 </div>
 
-                <div class="map-container">
+                <!-- Map Container -->
+                <div class="map-container" id="mapContainer">
                     <div id="map"></div>
                 </div>
 
+                <!-- Statistics -->
                 <div class="stats">
-                    <h3>Tracking Stats</h3>
+                    <h3>📊 Tracking Statistics</h3>
                     <div id="totalPoints">Points tracked: 0</div>
                     <div id="offlineQueue">Offline queue: 0</div>
+                    <div id="geofenceCount">Active geofences: 0</div>
+                    <div id="trackingDuration">Tracking duration: 00:00:00</div>
+                </div>
+                
+                <!-- Debug Info (hidden by default) -->
+                <div id="debugInfo" class="debug-info hidden">
+                    <h4>Debug Information</h4>
+                    <pre id="debugContent"></pre>
                 </div>
             </div>
         </main>
 
         <footer>
-            <p>🔒 User-consented tracking only | GDPR Compliant</p>
+            <p>🔒 User-consented tracking only | GDPR Compliant | Offline-capable PWA</p>
         </footer>
     </div>
 
-    <!-- Scripts in correct order -->
+    <!-- Toast notification container (for dynamic notifications) -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Third-party libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     
-    <!-- Core modules -->
+    <!-- Core modules in correct dependency order -->
     <script src="firebase-init.js"></script>
-    <script src="anti-spoof.js"></script>
+    <script src="anti-spoof.js"></script>  <!-- Must load before location-engine -->
     <script src="geofence-engine.js"></script>
     <script src="offline-queue.js"></script>
     <script src="auth.js"></script>
-    <script src="location-engine.js"></script>
-    <script src="app.js"></script>
+    <script src="location-engine.js"></script>  <!-- Depends on anti-spoof -->
+    <script src="app.js"></script>  <!-- Initializes everything -->
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered successfully:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('ServiceWorker update found:', newWorker);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('ServiceWorker registration failed:', error);
+                        // Show user-friendly message
+                        const statusEl = document.getElementById('connectionStatus');
+                        if (statusEl) {
+                            statusEl.innerHTML = '⚠️ SW Failed';
+                            statusEl.style.background = 'rgba(255, 152, 0, 0.3)';
+                        }
+                    });
+            });
+
+            // Listen for controller change (new service worker activated)
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                console.log('ServiceWorker controller changed');
+                window.location.reload();
+            });
+        } else {
+            console.log('Service workers are not supported in this browser.');
+            // Show message for unsupported browsers
+            const statusEl = document.getElementById('connectionStatus');
+            if (statusEl) {
+                statusEl.innerHTML = '⚠️ No SW Support';
+                statusEl.style.background = 'rgba(255, 152, 0, 0.3)';
+            }
+        }
+    </script>
+
+    <!-- Online/Offline Event Listeners -->
+    <script>
+        function updateConnectionStatus() {
+            const statusEl = document.getElementById('connectionStatus');
+            if (navigator.onLine) {
+                statusEl.innerHTML = '🟢 Online';
+                statusEl.className = 'connection-status online';
+            } else {
+                statusEl.innerHTML = '🔴 Offline';
+                statusEl.className = 'connection-status offline';
+            }
+        }
+
+        window.addEventListener('online', updateConnectionStatus);
+        window.addEventListener('offline', updateConnectionStatus);
+        
+        // Initial status
+        updateConnectionStatus();
+
+        // Add error tracking
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error || e.message);
+            // Could display to user in debug mode
+            const debugEl = document.getElementById('debugContent');
+            if (debugEl && !debugEl.closest('.hidden')) {
+                debugEl.textContent += '\n' + new Date().toISOString() + ': ' + (e.error || e.message);
+            }
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled promise rejection:', e.reason);
+            const debugEl = document.getElementById('debugContent');
+            if (debugEl && !debugEl.closest('.hidden')) {
+                debugEl.textContent += '\n' + new Date().toISOString() + ': ' + e.reason;
+            }
+        });
+    </script>
+
+    <!-- Debug mode toggle (hidden, can be activated with keyboard shortcut) -->
+    <script>
+        // Enable debug mode with Ctrl+Shift+D
+        let debugMode = false;
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                debugMode = !debugMode;
+                const debugEl = document.getElementById('debugInfo');
+                if (debugEl) {
+                    if (debugMode) {
+                        debugEl.classList.remove('hidden');
+                        console.log('Debug mode enabled');
+                    } else {
+                        debugEl.classList.add('hidden');
+                        console.log('Debug mode disabled');
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>

@@ -1,4 +1,5 @@
-// user-profile.js - Professional user profiles with avatars - v3.0.0
+// user-profile.js - Professional user profiles with avatars - v3.1.0
+// FIXED: Replaced Gravatar with local default avatar to prevent tracking prevention warnings
 
 class UserProfile {
     constructor() {
@@ -92,7 +93,8 @@ class UserProfile {
                 uid: this.currentUser.uid,
                 displayName: this.currentUser.email ? this.currentUser.email.split('@')[0] : 'Anonymous User',
                 email: this.currentUser.email || '',
-                photoURL: this.currentUser.photoURL || this.getGravatarUrl(this.currentUser.email),
+                // FIXED: Using local default avatar instead of Gravatar
+                photoURL: this.currentUser.photoURL || '/default-avatar.png',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
                 preferences: this.preferences,
@@ -108,27 +110,14 @@ class UserProfile {
 
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).set(this.profile);
-            console.log('✅ Default profile created');
+            console.log('✅ Default profile created with local avatar');
         } catch (error) {
             console.error('Failed to create default profile:', error);
         }
     }
 
-    getGravatarUrl(email) {
-        const hash = email ? this.md5(email.trim().toLowerCase()) : 'default';
-        return `https://www.gravatar.com/avatar/${hash}?d=mp&s=200`;
-    }
-
-    md5(string) {
-        // Simple MD5 implementation for gravatar
-        let hash = 0;
-        for (let i = 0; i < string.length; i++) {
-            const char = string.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash;
-        }
-        return Math.abs(hash).toString(16);
-    }
+    // FIXED: Removed Gravatar method entirely - using local default avatar only
+    // No more Gravatar tracking prevention warnings!
 
     createProfileUI() {
         // Remove existing panel if any

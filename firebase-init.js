@@ -11,74 +11,61 @@ const firebaseConfig = {
 
 // Initialize Firebase with error handling
 let firebaseInitialized = false;
-
-try {
-    // Check if Firebase is already initialized
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    } else {
-        firebase.app(); // Use existing app
-    }
-    firebaseInitialized = true;
-    console.log('✅ Firebase initialized successfully');
-} catch (error) {
-    console.error('❌ Firebase initialization failed:', error);
-}
-
-// Initialize services
 let auth = null;
 let db = null;
 let storage = null;
 let analytics = null;
 
-if (firebaseInitialized) {
-    try {
-        auth = firebase.auth();
-        db = firebase.firestore();
-        
-        // Initialize Storage if available
-        if (firebase.storage) {
-            storage = firebase.storage();
-        }
-        
-        // Initialize Analytics if available
-        if (firebase.analytics) {
-            analytics = firebase.analytics();
-        }
-
-        // Enable offline persistence with modern settings
-        db.enablePersistence({
-            synchronizeTabs: true,
-            experimentalForceOwningTab: false
-        })
-            .then(() => {
-                console.log('✅ Offline persistence enabled');
-            })
-            .catch((err) => {
-                if (err.code === 'failed-precondition') {
-                    console.warn('⚠️ Multiple tabs open - persistence enabled in first tab only');
-                } else if (err.code === 'unimplemented') {
-                    console.warn('⚠️ Browser does not support persistence');
-                } else {
-                    console.error('❌ Persistence error:', err);
-                }
-            });
-
-        // Set up Firestore settings
-        db.settings({
-            cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
-            ignoreUndefinedProperties: true,
-            merge: true
-        });
-
-        // Enable logging in development
-        if (window.location.hostname === 'localhost') {
-            firebase.firestore.setLogLevel('debug');
-        }
-
-    } catch (error) {
-        console.error('❌ Firebase services initialization failed:', error);
+try {
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
     }
+    
+    // Get services
+    auth = firebase.auth();
+    db = firebase.firestore();
+    
+    // Set settings BEFORE any other operations
+    db.settings({
+        cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+        ignoreUndefinedProperties: true,
+        merge: true
+    });
+    
+    // Enable persistence AFTER settings
+    db.enablePersistence({
+        synchronizeTabs: true,
+        experimentalForceOwningTab: false
+    })
+    .then(() => {
+        console.log('✅ Offline persistence enabled');
+    })
+    .catch((err) => {
+        if (err.code === 'failed-precondition') {
+            console.warn('⚠️ Multiple tabs open - persistence in first tab only');
+        } else if (err.code === 'unimplemented') {
+            console.warn('⚠️ Browser does not support persistence');
+        } else {
+            console.warn('⚠️ Persistence error:', err.message);
+        }
+    });
+    
+    // Initialize Storage if available
+    if (firebase.storage) {
+        storage = firebase.storage();
+    }
+    
+    // Initialize Analytics if available
+    if (firebase.analytics) {
+        analytics = firebase.analytics();
+    }
+    
+    firebaseInitialized = true;
+    console.log('✅ Firebase initialized successfully');
+    
+} catch (error) {
+    console.error('❌ Firebase initialization failed:', error);
 }
 
 // Create global services object
@@ -92,11 +79,6 @@ const firebaseServices = {
 
 // Make it globally available
 window.firebaseServices = firebaseServices;
-
-// Export for module usage if needed
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = firebaseServices;
-}
 
 // Log status
 console.log('📊 Firebase Services Status:', {

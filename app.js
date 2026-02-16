@@ -121,9 +121,9 @@ class App {
     async initServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
-                // Register service worker
-                const registration = await navigator.serviceWorker.register('/service-worker.js', {
-                    scope: '/'
+                // Fix: Use the correct path with /smart-location-tracker/ prefix
+                const registration = await navigator.serviceWorker.register('/smart-location-tracker/service-worker.js', {
+                    scope: '/smart-location-tracker/'
                 });
                 console.log('✅ ServiceWorker registered successfully:', registration.scope);
 

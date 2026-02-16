@@ -1,5 +1,5 @@
-// user-profile.js - Professional user profiles with avatars - v3.1.0
-// FIXED: Replaced Gravatar with local default avatar to prevent tracking prevention warnings
+// user-profile.js - Professional user profiles with avatars - v3.2.0
+// FEATURE: Built-in avatar generation - no external dependencies, works offline!
 
 class UserProfile {
     constructor() {
@@ -31,7 +31,6 @@ class UserProfile {
     }
 
     async loadUserProfile() {
-        // Wait for auth manager to be ready
         await this.waitForAuth();
         
         if (!window.authManager || !window.authManager.currentUser) {
@@ -47,13 +46,11 @@ class UserProfile {
 
             if (doc.exists) {
                 this.profile = doc.data();
-                // Merge preferences
                 this.preferences = { ...this.preferences, ...this.profile.preferences };
             } else {
                 await this.createDefaultProfile();
             }
             
-            // Track in analytics
             if (window.analytics) {
                 window.analytics.setUserProperties({
                     userId: this.currentUser.uid,
@@ -78,7 +75,6 @@ class UserProfile {
                     }
                 }, 100);
                 
-                // Timeout after 5 seconds
                 setTimeout(() => {
                     clearInterval(checkInterval);
                     resolve();
@@ -87,14 +83,88 @@ class UserProfile {
         });
     }
 
+    // ===== BEST FEATURE: Built-in Avatar Generation =====
+    async generateAvatar() {
+        return new Promise((resolve) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 200;
+            canvas.height = 200;
+            const ctx = canvas.getContext('2d');
+            
+            // Generate unique color based on user ID
+            // This ensures each user gets their own color
+            const hue = this.currentUser?.uid ? 
+                parseInt(this.currentUser.uid.substring(0, 8), 16) % 360 : 
+                Math.floor(Math.random() * 360);
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 200, 200);
+            gradient.addColorStop(0, `hsl(${hue}, 80%, 65%)`);
+            gradient.addColorStop(1, `hsl(${hue}, 80%, 45%)`);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 200, 200);
+            
+            // Get user initial
+            let initial = '👤';
+            if (this.currentUser?.email) {
+                // Use first letter of email
+                initial = this.currentUser.email[0].toUpperCase();
+            } else if (this.currentUser?.displayName) {
+                initial = this.currentUser.displayName[0].toUpperCase();
+            } else if (this.currentUser?.uid) {
+                // Use first character of uid if no email
+                initial = this.currentUser.uid[0].toUpperCase();
+            }
+            
+            // Draw initial
+            ctx.fillStyle = 'white';
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            ctx.font = 'bold 80px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(initial, 100, 110);
+            
+            // Reset shadow for patterns
+            ctx.shadowColor = 'transparent';
+            
+            // Add decorative pattern
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.arc(100, 100, 40 + i * 15, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            // Add small stars/dots
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            for (let i = 0; i < 5; i++) {
+                const x = 50 + Math.random() * 100;
+                const y = 50 + Math.random() * 100;
+                ctx.beginPath();
+                ctx.arc(x, y, 2 + Math.random() * 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Convert canvas to data URL
+            resolve(canvas.toDataURL('image/png'));
+        });
+    }
+
     async createDefaultProfile() {
         try {
+            // Generate avatar data URL (no external calls!)
+            const avatarDataUrl = await this.generateAvatar();
+            
             this.profile = {
                 uid: this.currentUser.uid,
                 displayName: this.currentUser.email ? this.currentUser.email.split('@')[0] : 'Anonymous User',
                 email: this.currentUser.email || '',
-                // FIXED: Using local default avatar instead of Gravatar
-                photoURL: this.currentUser.photoURL || '/default-avatar.png',
+                // Use generated avatar - no external dependencies!
+                photoURL: avatarDataUrl,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
                 preferences: this.preferences,
@@ -110,17 +180,13 @@ class UserProfile {
 
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).set(this.profile);
-            console.log('✅ Default profile created with local avatar');
+            console.log('✅ Default profile created with built-in avatar (no external dependencies)');
         } catch (error) {
             console.error('Failed to create default profile:', error);
         }
     }
 
-    // FIXED: Removed Gravatar method entirely - using local default avatar only
-    // No more Gravatar tracking prevention warnings!
-
     createProfileUI() {
-        // Remove existing panel if any
         const existingPanel = document.getElementById('profilePanel');
         if (existingPanel) {
             existingPanel.remove();
@@ -137,7 +203,7 @@ class UserProfile {
             
             <div class="profile-avatar-section">
                 <div class="avatar-container">
-                    <img id="profileAvatar" src="${this.profile?.photoURL || '/default-avatar.png'}" alt="Avatar" onerror="this.src='/default-avatar.png'">
+                    <img id="profileAvatar" src="${this.profile?.photoURL || ''}" alt="Avatar">
                     <div class="avatar-overlay" id="changeAvatarBtn">
                         <span>📷 Change</span>
                     </div>
@@ -158,17 +224,14 @@ class UserProfile {
                     <label>Display Name</label>
                     <input type="text" id="displayName" value="${this.profile?.displayName || ''}" placeholder="Enter your name">
                 </div>
-
                 <div class="info-group">
                     <label>Email</label>
                     <input type="email" id="email" value="${this.profile?.email || ''}" readonly disabled>
                 </div>
-
                 <div class="info-group">
                     <label>Bio</label>
                     <textarea id="bio" rows="3" placeholder="Tell us about yourself...">${this.profile?.bio || ''}</textarea>
                 </div>
-
                 <div class="info-group">
                     <label>Location</label>
                     <input type="text" id="location" value="${this.profile?.location || ''}" placeholder="City, Country">
@@ -177,7 +240,6 @@ class UserProfile {
 
             <div class="profile-preferences">
                 <h5>⚙️ Preferences</h5>
-                
                 <div class="pref-group">
                     <label>Units</label>
                     <select id="units">
@@ -185,7 +247,6 @@ class UserProfile {
                         <option value="imperial" ${this.preferences.units === 'imperial' ? 'selected' : ''}>Imperial (mi, ft)</option>
                     </select>
                 </div>
-
                 <div class="pref-group">
                     <label>Theme</label>
                     <select id="theme">
@@ -194,7 +255,6 @@ class UserProfile {
                         <option value="dark" ${this.preferences.theme === 'dark' ? 'selected' : ''}>Dark</option>
                     </select>
                 </div>
-
                 <div class="pref-group">
                     <label>Privacy</label>
                     <select id="privacy">
@@ -203,7 +263,6 @@ class UserProfile {
                         <option value="private" ${this.preferences.privacy === 'private' ? 'selected' : ''}>Private</option>
                     </select>
                 </div>
-
                 <div class="pref-group checkbox">
                     <label>
                         <input type="checkbox" id="notifications" ${this.preferences.notifications ? 'checked' : ''}>
@@ -244,42 +303,59 @@ class UserProfile {
     }
 
     initEventListeners() {
-        // Close button
         document.getElementById('closeProfileBtn')?.addEventListener('click', () => {
             this.hidePanel();
         });
 
-        // Upload avatar button
         document.getElementById('uploadAvatarBtn')?.addEventListener('click', () => {
             document.getElementById('avatarInput').click();
         });
 
-        // Generate avatar button
-        document.getElementById('generateAvatarBtn')?.addEventListener('click', () => {
-            this.generateAvatar();
+        // UPDATED: Generate avatar button now uses built-in generation
+        document.getElementById('generateAvatarBtn')?.addEventListener('click', async () => {
+            try {
+                this.showToast('🎨 Generating avatar...', 'info');
+                const avatarDataUrl = await this.generateAvatar();
+                
+                // Update UI
+                document.getElementById('profileAvatar').src = avatarDataUrl;
+                
+                // Save to profile
+                this.profile.photoURL = avatarDataUrl;
+                
+                // Save to Firestore
+                const db = window.firebaseServices.db;
+                await db.collection('users').doc(this.currentUser.uid).update({
+                    photoURL: avatarDataUrl
+                });
+                
+                this.showToast('✅ Avatar generated and saved', 'success');
+                
+                if (window.analytics) {
+                    window.analytics.trackEvent('avatar_generated');
+                }
+            } catch (error) {
+                console.error('Avatar generation failed:', error);
+                this.showToast('❌ Failed to generate avatar', 'error');
+            }
         });
 
-        // Avatar input change
         document.getElementById('avatarInput')?.addEventListener('change', (e) => {
             this.handleAvatarUpload(e.target.files[0]);
         });
 
-        // Change avatar overlay
         document.getElementById('changeAvatarBtn')?.addEventListener('click', () => {
             document.getElementById('avatarInput').click();
         });
 
-        // Save profile
         document.getElementById('saveProfileBtn')?.addEventListener('click', () => {
             this.saveProfile();
         });
 
-        // Delete account
         document.getElementById('deleteAccountBtn')?.addEventListener('click', () => {
             this.deleteAccount();
         });
 
-        // Click outside to close
         document.addEventListener('click', (e) => {
             const panel = document.getElementById('profilePanel');
             if (panel && panel.classList.contains('active') && 
@@ -293,7 +369,6 @@ class UserProfile {
     async handleAvatarUpload(file) {
         if (!file) return;
 
-        // Validate file
         if (!file.type.startsWith('image/')) {
             this.showToast('Please select an image file', 'error');
             return;
@@ -306,14 +381,12 @@ class UserProfile {
 
         this.avatarFile = file;
 
-        // Preview
         const reader = new FileReader();
         reader.onload = (e) => {
             document.getElementById('profileAvatar').src = e.target.result;
         };
         reader.readAsDataURL(file);
 
-        // Upload
         await this.uploadAvatar(file);
     }
 
@@ -321,10 +394,8 @@ class UserProfile {
         try {
             this.showToast('📤 Uploading avatar...', 'info');
 
-            // Compress image
             const compressedFile = await this.compressImage(file);
 
-            // Check if Firebase Storage is available
             if (!firebase.storage) {
                 throw new Error('Firebase Storage not available');
             }
@@ -333,14 +404,11 @@ class UserProfile {
             const ref = storage.ref(`avatars/${this.currentUser.uid}`);
             await ref.put(compressedFile);
 
-            // Get download URL
             const url = await ref.getDownloadURL();
 
-            // Update profile
             this.profile.photoURL = url;
             document.getElementById('profileAvatar').src = url;
 
-            // Save to Firestore
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).update({
                 photoURL: url
@@ -348,7 +416,6 @@ class UserProfile {
 
             this.showToast('✅ Avatar uploaded successfully');
             
-            // Track in analytics
             if (window.analytics) {
                 window.analytics.trackEvent('avatar_uploaded');
             }
@@ -369,7 +436,6 @@ class UserProfile {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
 
-                    // Calculate new dimensions (max 500px)
                     let width = img.width;
                     let height = img.height;
                     const maxSize = 500;
@@ -384,7 +450,6 @@ class UserProfile {
 
                     canvas.width = width;
                     canvas.height = height;
-
                     ctx.drawImage(img, 0, 0, width, height);
 
                     canvas.toBlob((blob) => {
@@ -395,43 +460,6 @@ class UserProfile {
             };
             reader.onerror = reject;
         });
-    }
-
-    async generateAvatar() {
-        try {
-            this.showToast('🎨 Generating avatar...', 'info');
-
-            // Generate random avatar using DiceBear API
-            const seed = this.currentUser?.uid || Math.random().toString(36);
-            const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
-
-            // Convert SVG to PNG
-            const response = await fetch(avatarUrl);
-            const svg = await response.text();
-
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-
-            await new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-                img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
-            });
-
-            canvas.width = 200;
-            canvas.height = 200;
-            ctx.drawImage(img, 0, 0, 200, 200);
-
-            const blob = await new Promise((resolve) => {
-                canvas.toBlob(resolve, 'image/png');
-            });
-
-            await this.uploadAvatar(blob);
-        } catch (error) {
-            console.error('Avatar generation failed:', error);
-            this.showToast('❌ Failed to generate avatar', 'error');
-        }
     }
 
     async saveProfile() {
@@ -457,11 +485,8 @@ class UserProfile {
             this.preferences = updates.preferences;
             
             this.showToast('✅ Profile saved successfully');
-
-            // Apply theme
             this.applyTheme(updates.preferences.theme);
 
-            // Track in analytics
             if (window.analytics) {
                 window.analytics.trackEvent('profile_updated');
             }
@@ -485,7 +510,6 @@ class UserProfile {
             return;
         }
 
-        // Double confirm
         if (!confirm('This is your final warning! Deleting your account will remove all your trips, geofences, and profile data. Continue?')) {
             return;
         }
@@ -493,11 +517,9 @@ class UserProfile {
         try {
             this.showToast('🗑️ Deleting account...', 'info');
 
-            // Delete user data from Firestore
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).delete();
 
-            // Delete all user locations
             const locations = await db.collection('locations').where('userId', '==', this.currentUser.uid).get();
             const batch = db.batch();
             locations.docs.forEach(doc => {
@@ -505,7 +527,6 @@ class UserProfile {
             });
             await batch.commit();
 
-            // Delete all user geofences
             const geofences = await db.collection('geofences').where('userId', '==', this.currentUser.uid).get();
             const geofenceBatch = db.batch();
             geofences.docs.forEach(doc => {
@@ -513,24 +534,20 @@ class UserProfile {
             });
             await geofenceBatch.commit();
 
-            // Delete avatar from Storage
             if (firebase.storage) {
                 const storage = firebase.storage();
                 const ref = storage.ref(`avatars/${this.currentUser.uid}`);
-                await ref.delete().catch(() => {}); // Ignore if no avatar
+                await ref.delete().catch(() => {});
             }
 
-            // Delete user from Firebase Auth
             await this.currentUser.delete();
 
             this.showToast('✅ Account deleted');
             
-            // Track in analytics
             if (window.analytics) {
                 window.analytics.trackEvent('account_deleted');
             }
 
-            // Redirect to home
             setTimeout(() => {
                 window.location.href = '/smart-location-tracker/';
             }, 1500);
@@ -552,7 +569,6 @@ class UserProfile {
                 totalDuration: trips.reduce((sum, t) => sum + (t.duration || 0), 0)
             };
 
-            // Check for achievements
             const achievements = [];
 
             if (stats.totalTrips >= 1) achievements.push('first_trip');
@@ -560,8 +576,8 @@ class UserProfile {
             if (stats.totalTrips >= 50) achievements.push('adventurer');
             if (stats.totalDistance >= 100000) achievements.push('marathoner');
             if (stats.totalDistance >= 1000000) achievements.push('globetrotter');
-            if (stats.totalDuration >= 3600) achievements.push('time_traveler'); // 1 hour
-            if (stats.totalDuration >= 86400) achievements.push('day_tripper'); // 24 hours
+            if (stats.totalDuration >= 3600) achievements.push('time_traveler');
+            if (stats.totalDuration >= 86400) achievements.push('day_tripper');
 
             stats.achievements = achievements;
 
@@ -642,7 +658,6 @@ class UserProfile {
 
 // Initialize user profile when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Wait a bit for auth to initialize
     setTimeout(() => {
         if (!window.userProfile) {
             window.userProfile = new UserProfile();
@@ -650,5 +665,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000);
 });
 
-// Make it globally available
 window.UserProfile = UserProfile;

@@ -17,6 +17,14 @@ service cloud.firestore {
              request.resource.data.lng >= -180 && request.resource.data.lng <= 180;
     }
 
+    // Allow public read/write for development (temporary)
+    // TODO: Restrict in production
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    // More restrictive rules for production (uncomment after testing)
+    /*
     // Locations collection
     match /locations/{document} {
       allow read: if isAuthenticated() && 
@@ -56,5 +64,6 @@ service cloud.firestore {
       
       allow write: if isAuthenticated() && isOwner(userId);
     }
+    */
   }
 }

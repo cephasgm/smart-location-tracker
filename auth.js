@@ -1,10 +1,16 @@
+// auth.js - Authentication Manager
+// Version 2.0.0 - Fixed initialization and error handling
+
 class AuthManager {
     constructor() {
-        // Wait for firebaseServices to be available
+        this.initialized = false;
+        this.auth = null;
+        this.currentUser = null;
         this.init();
     }
 
     init() {
+        // Check if firebaseServices is available
         if (!window.firebaseServices) {
             console.error('❌ firebaseServices not available yet, retrying in 100ms...');
             setTimeout(() => this.init(), 100);
@@ -12,9 +18,15 @@ class AuthManager {
         }
 
         this.auth = window.firebaseServices.auth;
-        this.currentUser = null;
+        if (!this.auth) {
+            console.error('❌ Firebase Auth not available');
+            setTimeout(() => this.init(), 100);
+            return;
+        }
+
         this.initAuthListeners();
         console.log('✅ AuthManager initialized');
+        this.initialized = true;
     }
 
     initAuthListeners() {
@@ -140,8 +152,9 @@ class AuthManager {
         `;
         
         const header = document.querySelector('.header-actions');
-        if (header) {
-            header.insertBefore(statusElement, document.getElementById('signOutBtn'));
+        const signOutBtn = document.getElementById('signOutBtn');
+        if (header && signOutBtn) {
+            header.insertBefore(statusElement, signOutBtn);
         }
     }
 

@@ -1,5 +1,7 @@
+// Main application controller - v3.0.0
 class App {
     constructor() {
+        this.initialized = false;
         this.initElements();
         this.initEventListeners();
         this.initServiceWorker();
@@ -9,6 +11,9 @@ class App {
         this.initToasts();
         this.initInstallPrompt();
         this.initFeatureInitialization();
+        
+        this.initialized = true;
+        console.log('✅ App initialized');
     }
 
     initElements() {
@@ -21,6 +26,7 @@ class App {
         this.signOutBtn = document.getElementById('signOutBtn');
         this.installBtn = document.getElementById('installBtn');
         this.searchContainer = document.getElementById('searchContainer');
+        this.featureButtons = document.querySelectorAll('.feature-buttons .btn');
     }
 
     initEventListeners() {
@@ -36,7 +42,9 @@ class App {
                         .catch((error) => {
                             this.showToast(error.message, 'error');
                         })
-                        .finally(() => this.hideLoading(this.anonymousSignInBtn, 'Continue Anonymously'));
+                        .finally(() => {
+                            this.hideLoading(this.anonymousSignInBtn, 'Continue Anonymously');
+                        });
                 }
             });
         }
@@ -57,7 +65,9 @@ class App {
                         .catch((error) => {
                             this.showToast(error.message, 'error');
                         })
-                        .finally(() => this.hideLoading(submitBtn, 'Sign In with Email'));
+                        .finally(() => {
+                            this.hideLoading(submitBtn, 'Sign In with Email');
+                        });
                 }
             });
         }
@@ -86,16 +96,16 @@ class App {
             this.requestLocationBtn.addEventListener('click', async () => {
                 try {
                     if (!window.locationEngine) {
-                        console.error('LocationEngine not initialized');
-                        return;
+                        throw new Error('LocationEngine not initialized');
                     }
                     
                     this.showLoading(this.requestLocationBtn, 'Requesting...');
                     
                     const permission = await window.locationEngine.requestLocationPermission();
+                    
                     if (permission === 'granted' || permission === 'prompt') {
                         navigator.geolocation.getCurrentPosition(
-                            () => {
+                            (position) => {
                                 this.requestLocationBtn.disabled = true;
                                 this.startTrackingBtn.disabled = false;
                                 const locationPermission = document.getElementById('locationPermission');
@@ -104,7 +114,6 @@ class App {
                                 }
                                 this.showToast('📍 Location permission granted', 'success');
                                 
-                                // Track in analytics
                                 if (window.analytics) {
                                     window.analytics.trackEvent('permission_granted', {
                                         type: 'location'
@@ -112,8 +121,21 @@ class App {
                                 }
                             },
                             (error) => {
-                                this.showToast('❌ Location permission denied', 'error');
+                                let message = 'Location permission denied';
+                                if (error.code === 1) {
+                                    message = 'Permission denied. Please enable location access.';
+                                } else if (error.code === 2) {
+                                    message = 'Location unavailable. Please try again.';
+                                } else if (error.code === 3) {
+                                    message = 'Location request timed out.';
+                                }
+                                this.showToast('❌ ' + message, 'error');
                                 console.error('Geolocation error:', error);
+                            },
+                            {
+                                enableHighAccuracy: true,
+                                timeout: 10000,
+                                maximumAge: 0
                             }
                         );
                     }
@@ -132,7 +154,6 @@ class App {
                     window.locationEngine.startTracking();
                     this.showToast('📍 Tracking started', 'success');
                     
-                    // Track in analytics
                     if (window.analytics) {
                         window.analytics.trackEvent('tracking_started');
                     }
@@ -146,13 +167,22 @@ class App {
                     window.locationEngine.stopTracking();
                     this.showToast('⏹️ Tracking stopped', 'info');
                     
-                    // Track in analytics
                     if (window.analytics) {
                         window.analytics.trackEvent('tracking_stopped');
                     }
                 }
             });
         }
+
+        // Feature buttons
+        this.featureButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const action = e.target.textContent.trim();
+                if (window.analytics) {
+                    window.analytics.trackEvent('feature_click', { feature: action });
+                }
+            });
+        });
 
         // Network events
         window.addEventListener('online', this.handleOnline.bind(this));
@@ -161,8 +191,9 @@ class App {
         // Before unload
         window.addEventListener('beforeunload', () => {
             if (window.locationEngine && window.locationEngine.isTracking) {
-                // Save state before closing
                 localStorage.setItem('trackingActive', 'true');
+            } else {
+                localStorage.removeItem('trackingActive');
             }
         });
     }
@@ -182,7 +213,10 @@ class App {
 
     showToast(message, type = 'info') {
         const toastContainer = document.getElementById('toastContainer');
-        if (!toastContainer) return;
+        if (!toastContainer) {
+            console.warn('Toast container not found');
+            return;
+        }
         
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
@@ -208,10 +242,13 @@ class App {
         
         toastContainer.appendChild(toast);
         
-        // Auto remove after 5 seconds
         setTimeout(() => {
             toast.style.animation = 'slideOutRight 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 300);
         }, 5000);
     }
 
@@ -225,7 +262,6 @@ class App {
                 console.log('✅ ServiceWorker registered successfully:', registration.scope);
                 this.showToast('📱 App ready for offline use', 'success');
 
-                // Check for updates
                 registration.addEventListener('updatefound', () => {
                     const newWorker = registration.installing;
                     console.log('🔄 New service worker installing');
@@ -237,7 +273,6 @@ class App {
                     });
                 });
 
-                // Track in analytics
                 if (window.analytics) {
                     window.analytics.trackEvent('service_worker_registered');
                 }
@@ -261,7 +296,6 @@ class App {
         this.updateConnectionStatus();
         this.showToast('🟢 Back online', 'success');
         
-        // Sync offline data
         if (window.authManager?.currentUser && window.offlineQueue) {
             window.offlineQueue.syncWithFirestore(window.authManager.currentUser.uid)
                 .then(() => {
@@ -272,7 +306,6 @@ class App {
                 });
         }
 
-        // Track in analytics
         if (window.analytics) {
             window.analytics.trackEvent('connection_online');
         }
@@ -282,7 +315,6 @@ class App {
         this.updateConnectionStatus();
         this.showToast('🔴 You are offline - tracking will resume when online', 'warning');
         
-        // Track in analytics
         if (window.analytics) {
             window.analytics.trackEvent('connection_offline');
         }
@@ -302,14 +334,17 @@ class App {
 
     async initNotificationPermission() {
         if ('Notification' in window && Notification.permission === 'default') {
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
-                console.log('✅ Notifications enabled');
-                
-                // Track in analytics
-                if (window.analytics) {
-                    window.analytics.trackEvent('notifications_enabled');
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    console.log('✅ Notifications enabled');
+                    
+                    if (window.analytics) {
+                        window.analytics.trackEvent('notifications_enabled');
+                    }
                 }
+            } catch (error) {
+                console.error('Failed to request notification permission:', error);
             }
         }
     }
@@ -328,7 +363,6 @@ class App {
             e.preventDefault();
             window.deferredPrompt = e;
             
-            // Show install button if not already present
             if (!this.installBtn) {
                 this.installBtn = document.createElement('button');
                 this.installBtn.id = 'installBtn';
@@ -338,36 +372,44 @@ class App {
                 this.installBtn.addEventListener('click', async () => {
                     if (!window.deferredPrompt) return;
                     
-                    window.deferredPrompt.prompt();
-                    const { outcome } = await window.deferredPrompt.userChoice;
-                    
-                    if (outcome === 'accepted') {
-                        this.showToast('✅ Thank you for installing!', 'success');
+                    try {
+                        window.deferredPrompt.prompt();
+                        const { outcome } = await window.deferredPrompt.userChoice;
                         
-                        // Track in analytics
-                        if (window.analytics) {
-                            window.analytics.trackEvent('app_installed');
+                        if (outcome === 'accepted') {
+                            this.showToast('✅ Thank you for installing!', 'success');
+                            
+                            if (window.analytics) {
+                                window.analytics.trackEvent('app_installed');
+                            }
                         }
+                    } catch (error) {
+                        console.error('Install prompt failed:', error);
                     }
                     
                     window.deferredPrompt = null;
-                    this.installBtn.remove();
+                    if (this.installBtn) {
+                        this.installBtn.remove();
+                        this.installBtn = null;
+                    }
                 });
                 
-                document.querySelector('.header-actions').appendChild(this.installBtn);
+                const headerActions = document.querySelector('.header-actions');
+                if (headerActions) {
+                    headerActions.appendChild(this.installBtn);
+                }
             }
         });
 
-        // App installed
         window.addEventListener('appinstalled', () => {
             console.log('✅ PWA installed');
             this.showToast('🎉 App installed successfully!', 'success');
             
             if (this.installBtn) {
                 this.installBtn.remove();
+                this.installBtn = null;
             }
             
-            // Track in analytics
             if (window.analytics) {
                 window.analytics.trackEvent('app_installed');
             }
@@ -375,7 +417,6 @@ class App {
     }
 
     initFeatureInitialization() {
-        // Watch for tracking section becoming visible
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.target.id === 'trackingSection' && 
@@ -398,37 +439,40 @@ class App {
     initializeFeatures() {
         console.log('🚀 Initializing advanced features...');
         
-        // Initialize navigation engine if map exists
-        if (window.locationEngine && window.locationEngine.map && window.navigationEngine) {
-            setTimeout(() => {
-                window.navigationEngine.setupRouting(window.locationEngine.map);
-                console.log('🗺️ Navigation engine initialized');
-            }, 1000);
+        setTimeout(() => {
+            try {
+                if (window.locationEngine && window.locationEngine.map && window.navigationEngine) {
+                    window.navigationEngine.setupRouting(window.locationEngine.map);
+                    console.log('🗺️ Navigation engine initialized');
+                }
+            } catch (error) {
+                console.error('Failed to initialize navigation:', error);
+            }
+        }, 1000);
+        
+        if (window.locationHistory) {
+            window.locationHistory.loadTrips()
+                .then(trips => {
+                    console.log(`📜 Loaded ${trips.length} trips`);
+                })
+                .catch(error => {
+                    console.error('Failed to load trips:', error);
+                });
         }
         
-        // Load trips for history
-        if (window.locationHistory) {
-            window.locationHistory.loadTrips().then(trips => {
-                console.log(`📜 Loaded ${trips.length} trips`);
+        if (window.userProfile && window.authManager?.currentUser) {
+            window.userProfile.loadUserProfile().catch(error => {
+                console.error('Failed to load user profile:', error);
             });
         }
         
-        // Initialize user profile if logged in
-        if (window.userProfile && window.authManager?.currentUser) {
-            window.userProfile.loadUserProfile();
-        }
-        
-        // Set user in analytics
         if (window.analytics && window.authManager?.currentUser) {
             window.analytics.setUserId(window.authManager.currentUser.uid);
             window.analytics.setUserProperties({
                 email: window.authManager.currentUser.email,
                 isAnonymous: window.authManager.currentUser.isAnonymous
             });
-        }
-        
-        // Track feature initialization
-        if (window.analytics) {
+            
             window.analytics.trackEvent('features_initialized', {
                 navigation: !!window.navigationEngine,
                 history: !!window.locationHistory,
@@ -446,14 +490,17 @@ class App {
             navigator.permissions.query({ name: 'geolocation' })
                 .then(permission => {
                     if (permission.state === 'granted') {
-                        if (this.requestLocationBtn) this.requestLocationBtn.disabled = true;
-                        if (this.startTrackingBtn) this.startTrackingBtn.disabled = false;
+                        if (this.requestLocationBtn) {
+                            this.requestLocationBtn.disabled = true;
+                        }
+                        if (this.startTrackingBtn) {
+                            this.startTrackingBtn.disabled = false;
+                        }
                         const locationPermission = document.getElementById('locationPermission');
                         if (locationPermission) {
                             locationPermission.style.display = 'none';
                         }
                         
-                        // Check if tracking was active before
                         const trackingActive = localStorage.getItem('trackingActive') === 'true';
                         if (trackingActive && window.locationEngine) {
                             setTimeout(() => {
@@ -468,28 +515,35 @@ class App {
         }
     }
 
-    // Helper method to show/hide search container
     toggleSearch(show) {
         if (this.searchContainer) {
             this.searchContainer.style.display = show ? 'block' : 'none';
         }
     }
 
-    // Helper method to update tracking stats
     updateTrackingStats(points, queue, geofences, duration) {
         const pointsEl = document.getElementById('totalPoints');
         const queueEl = document.getElementById('offlineQueue');
         const geofenceEl = document.getElementById('geofenceCount');
         const durationEl = document.getElementById('trackingDuration');
         
-        if (pointsEl) pointsEl.innerHTML = `📍 Points tracked: ${points}`;
-        if (queueEl) queueEl.innerHTML = `📱 Offline queue: ${queue}`;
-        if (geofenceEl) geofenceEl.innerHTML = `🚧 Active geofences: ${geofences}`;
-        if (durationEl) durationEl.innerHTML = `⏱ Tracking duration: ${duration}`;
+        if (pointsEl) {
+            pointsEl.innerHTML = `📍 Points tracked: ${points}`;
+        }
+        if (queueEl) {
+            queueEl.innerHTML = `📱 Offline queue: ${queue}`;
+        }
+        if (geofenceEl) {
+            geofenceEl.innerHTML = `🚧 Active geofences: ${geofences}`;
+        }
+        if (durationEl) {
+            durationEl.innerHTML = `⏱ Tracking duration: ${this.formatDuration(duration)}`;
+        }
     }
 
-    // Helper method to format duration
     formatDuration(seconds) {
+        if (!seconds && seconds !== 0) return '00:00:00';
+        
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
@@ -497,9 +551,7 @@ class App {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    // Clean up on page unload
     destroy() {
-        // Save tracking state
         if (window.locationEngine && window.locationEngine.isTracking) {
             localStorage.setItem('trackingActive', 'true');
         } else {
@@ -510,37 +562,36 @@ class App {
 
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Create global app instance
-    window.app = new App();
-    
-    // Handle page unload
-    window.addEventListener('beforeunload', () => {
-        if (window.app) {
-            window.app.destroy();
-        }
-    });
-
-    // Log startup
-    console.log('🚀 Smart Location Tracker v3.0.0 initialized');
-    console.log('📱 PWA features enabled');
-    console.log('📍 Location tracking ready');
-    console.log('🗺️ Navigation features available');
-    console.log('📤 Sharing capabilities active');
-    console.log('👤 User profile system loaded');
-    
-    // Check for URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('share')) {
-        // Handle shared location
-        setTimeout(() => {
-            if (window.socialSharing) {
-                window.socialSharing.handleSharedLink(urlParams);
+    try {
+        window.app = new App();
+        
+        window.addEventListener('beforeunload', () => {
+            if (window.app) {
+                window.app.destroy();
             }
-        }, 2000);
+        });
+
+        console.log('🚀 Smart Location Tracker v3.0.0 initialized');
+        console.log('📱 PWA features enabled');
+        console.log('📍 Location tracking ready');
+        console.log('🗺️ Navigation features available');
+        console.log('📤 Sharing capabilities active');
+        console.log('👤 User profile system loaded');
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('share') && window.socialSharing) {
+            setTimeout(() => {
+                window.socialSharing.handleSharedLink(urlParams).catch(error => {
+                    console.error('Failed to handle shared link:', error);
+                });
+            }, 2000);
+        }
+    } catch (error) {
+        console.error('Failed to initialize app:', error);
     }
 });
 
-// Error handling
+// Global error handling
 window.addEventListener('error', (event) => {
     console.error('Global error:', event.error || event.message);
     
@@ -548,11 +599,12 @@ window.addEventListener('error', (event) => {
         window.analytics.trackError(event.error || new Error(event.message), {
             type: 'global',
             filename: event.filename,
-            lineno: event.lineno
+            lineno: event.lineno,
+            colno: event.colno
         });
     }
     
-    if (window.app) {
+    if (window.app && window.app.showToast) {
         window.app.showToast('⚠️ An error occurred', 'error');
     }
 });

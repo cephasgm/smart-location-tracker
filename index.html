@@ -17,7 +17,6 @@
     <meta name="apple-mobile-web-app-title" content="Smart Tracker">
     <meta name="format-detection" content="telephone=no">
     <meta name="application-name" content="Smart Tracker">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     
     <!-- Icons -->
     <link rel="apple-touch-icon" href="icon-192x192.png">
@@ -35,11 +34,10 @@
     <meta name="msapplication-TileColor" content="#667eea">
     <meta name="msapplication-TileImage" content="icon-192x192.png">
     
-    <!-- Leaflet CSS and Plugins -->
+    <!-- Leaflet CSS (only essential plugins) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" crossorigin="anonymous" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.css" crossorigin="anonymous" />
     
     <!-- Chart.js for analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
@@ -48,14 +46,25 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
     
     <style>
-        /* Fallback styles in case styles.css hasn't loaded yet */
+        /* Critical fallback styles in case styles.css hasn't loaded yet */
         .hidden { display: none !important; }
         .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
-        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; transition: all 0.3s ease; }
         .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a67d8; transform: translateY(-2px); }
         .btn-secondary { background: #f093fb; color: white; }
+        .btn-secondary:hover { background: #e06be9; transform: translateY(-2px); }
         .btn-success { background: #84fab0; color: #1a4731; }
+        .btn-success:hover { background: #6be09a; transform: translateY(-2px); }
         .btn-danger { background: #f43b47; color: white; }
+        .btn-danger:hover { background: #e02e3a; transform: translateY(-2px); }
+        .connection-status { padding: 5px 15px; border-radius: 20px; font-size: 14px; }
+        .connection-status.online { background: #84fab0; color: #1a4731; }
+        .connection-status.offline { background: #f43b47; color: white; }
+        #installBtn { animation: pulse 2s infinite; margin-left: 10px; }
+        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        @media (max-width: 768px) { .header-actions { flex-direction: column; width: 100%; } .btn { width: 100%; } }
     </style>
 </head>
 <body>
@@ -162,7 +171,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js" crossorigin="anonymous"></script>
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js" crossorigin="anonymous"></script>
@@ -170,9 +178,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js" crossorigin="anonymous"></script>
-    
-    <!-- Sentry for error tracking -->
-    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
     
     <!-- ===== CORE MODULES (load in this exact order) ===== -->
     <script src="firebase-init.js"></script>
@@ -218,7 +223,12 @@
                                     if (window.app && window.app.showToast) {
                                         window.app.showToast('🔄 Update available - refresh to update', 'info');
                                     } else {
-                                        alert('New version available! Refresh to update.');
+                                        // Fallback if app not ready
+                                        var toast = document.createElement('div');
+                                        toast.className = 'toast info';
+                                        toast.innerHTML = '<div class="toast-title">ℹ️ Info</div><div class="toast-message">🔄 Update available - refresh to update</div>';
+                                        document.getElementById('toastContainer')?.appendChild(toast);
+                                        setTimeout(function() { toast.remove(); }, 5000);
                                     }
                                 }
                             });
@@ -322,6 +332,59 @@
                         }
                     }
                 }
+            });
+
+            // Add click handlers for feature buttons
+            document.addEventListener('DOMContentLoaded', function() {
+                document.getElementById('navigateBtn')?.addEventListener('click', function() {
+                    if (window.navigationEngine) {
+                        document.getElementById('searchContainer').style.display = 'block';
+                        window.navigationEngine.setupRouting(window.locationEngine?.map);
+                    } else {
+                        alert('Navigation engine not ready yet');
+                    }
+                });
+
+                document.getElementById('historyBtn')?.addEventListener('click', function() {
+                    if (window.locationHistory) {
+                        window.locationHistory.showPanel?.();
+                    } else {
+                        alert('History feature not ready yet');
+                    }
+                });
+
+                document.getElementById('shareBtn')?.addEventListener('click', function() {
+                    if (window.socialSharing) {
+                        window.socialSharing.showPanel();
+                    } else {
+                        alert('Sharing feature not ready yet');
+                    }
+                });
+
+                document.getElementById('profileBtn')?.addEventListener('click', function() {
+                    if (window.userProfile) {
+                        window.userProfile.showPanel();
+                    } else {
+                        alert('Profile feature not ready yet');
+                    }
+                });
+
+                document.getElementById('goBtn')?.addEventListener('click', function() {
+                    var from = document.getElementById('searchFrom')?.value;
+                    var to = document.getElementById('searchTo')?.value;
+                    if (window.navigationEngine && from && to) {
+                        window.navigationEngine.searchAndRoute(from, to);
+                    }
+                });
+
+                document.getElementById('clearBtn')?.addEventListener('click', function() {
+                    document.getElementById('searchFrom').value = '';
+                    document.getElementById('searchTo').value = '';
+                    document.getElementById('searchContainer').style.display = 'none';
+                    if (window.navigationEngine) {
+                        window.navigationEngine.clearRoute?.();
+                    }
+                });
             });
 
             // Log startup

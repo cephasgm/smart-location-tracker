@@ -1,7 +1,7 @@
 {
   "name": "smart-location-tracker",
-  "version": "1.0.0",
-  "description": "User-consented PWA location tracking with Firebase",
+  "version": "2.0.0",
+  "description": "Advanced PWA location tracking with navigation, geofencing, and analytics",
   "main": "index.html",
   "scripts": {
     "start": "firebase serve",
@@ -15,10 +15,24 @@
     "location-tracking",
     "firebase",
     "geolocation",
-    "offline-first"
+    "navigation",
+    "offline-first",
+    "geofencing"
   ],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "leaflet-routing-machine": "^3.2.12",
+    "leaflet-control-geocoder": "^2.4.0",
+    "@sentry/browser": "^7.91.0",
+    "compressorjs": "^1.2.1",
+    "dexie": "^3.2.4",
+    "chart.js": "^4.4.1",
+    "leaflet-providers": "^1.13.0",
+    "lz-string": "^1.5.0",
+    "pako": "^2.1.0"
+  },
   "devDependencies": {
     "firebase-tools": "^13.0.0"
   },

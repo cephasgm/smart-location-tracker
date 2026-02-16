@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Location Tracker</title>
+    <title>Smart Location Tracker - Modern PWA</title>
     
     <!-- Stylesheets -->
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
     
-    <!-- Meta tags for PWA -->
-    <meta name="theme-color" content="#2196f3">
+    <!-- Meta tags for modern PWA -->
+    <meta name="theme-color" content="#667eea">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Smart Tracker">
     <meta name="format-detection" content="telephone=no">
     
-    <!-- Icons - remove preload, just link normally -->
+    <!-- Icons -->
     <link rel="apple-touch-icon" href="icon-192x192.png">
     <link rel="shortcut icon" href="icon-72x72.png">
     <link rel="icon" type="image/png" sizes="72x72" href="icon-72x72.png">
@@ -30,26 +30,29 @@
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512x512.png">
     
     <!-- Microsoft Tiles -->
-    <meta name="msapplication-TileColor" content="#2196f3">
+    <meta name="msapplication-TileColor" content="#667eea">
     <meta name="msapplication-TileImage" content="icon-192x192.png">
     
-    <!-- Leaflet CSS with crossorigin -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
     
-    <!-- Favicon fallback - emoji-based favicon to prevent 404 -->
+    <!-- Favicon - emoji-based to prevent 404 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
 </head>
 <body>
     <div class="app-container">
         <header>
-            <h1>📍 Smart Location Tracker</h1>
-            <div class="connection-status" id="connectionStatus">🟢 Online</div>
+            <h1>📍CephasGM Smart Location Tracker</h1>
+            <div class="header-actions">
+                <div class="connection-status" id="connectionStatus">🟢 Online</div>
+                <button id="signOutBtn" class="btn btn-secondary hidden">Sign Out</button>
+            </div>
         </header>
 
         <main>
             <!-- Authentication Section -->
             <div class="auth-section" id="authSection">
-                <h2>Authentication</h2>
+                <h2>Welcome Back</h2>
                 <button id="anonymousSignIn" class="btn btn-primary">Continue Anonymously</button>
                 <div class="divider">or</div>
                 <form id="emailSignInForm">
@@ -64,26 +67,26 @@
             <div class="tracking-section hidden" id="trackingSection">
                 <!-- Location Permission Request -->
                 <div class="location-permission" id="locationPermission">
-                    <p>We need your permission to track your location</p>
+                    <p>📍 We need your location to provide accurate tracking</p>
                     <button id="requestLocationBtn" class="btn btn-primary">Enable Location Tracking</button>
                 </div>
 
                 <!-- Tracking Controls -->
                 <div class="tracking-controls">
-                    <button id="startTrackingBtn" class="btn btn-success" disabled>Start Tracking</button>
-                    <button id="stopTrackingBtn" class="btn btn-danger" disabled>Stop Tracking</button>
+                    <button id="startTrackingBtn" class="btn btn-success" disabled>▶ Start Tracking</button>
+                    <button id="stopTrackingBtn" class="btn btn-danger" disabled>⏹ Stop Tracking</button>
                 </div>
 
                 <!-- Location Information Display -->
                 <div class="location-info">
                     <h3>📍 Current Location</h3>
-                    <div id="locationStatus" class="status-warning">Waiting for GPS signal...</div>
-                    <div id="coordinates">Latitude: --, Longitude: --</div>
-                    <div id="accuracy">Accuracy: -- meters</div>
-                    <div id="altitude">Altitude: -- meters</div>
-                    <div id="speed">Speed: -- m/s</div>
-                    <div id="timestamp">Last update: --</div>
-                    <div id="geofenceStatus" class="status-info">No geofence active</div>
+                    <div id="locationStatus" class="status-warning">⏳ Waiting for GPS signal...</div>
+                    <div id="coordinates">🌐 Latitude: --, Longitude: --</div>
+                    <div id="accuracy">🎯 Accuracy: -- meters</div>
+                    <div id="altitude">⛰ Altitude: -- meters</div>
+                    <div id="speed">⚡ Speed: -- m/s</div>
+                    <div id="timestamp">🕐 Last update: --</div>
+                    <div id="geofenceStatus" class="status-info">📍 No geofence active</div>
                 </div>
 
                 <!-- Map Container -->
@@ -94,141 +97,58 @@
                 <!-- Statistics -->
                 <div class="stats">
                     <h3>📊 Tracking Statistics</h3>
-                    <div id="totalPoints">Points tracked: 0</div>
-                    <div id="offlineQueue">Offline queue: 0</div>
-                    <div id="geofenceCount">Active geofences: 0</div>
-                    <div id="trackingDuration">Tracking duration: 00:00:00</div>
+                    <div id="totalPoints">📍 Points tracked: 0</div>
+                    <div id="offlineQueue">📱 Offline queue: 0</div>
+                    <div id="geofenceCount">🚧 Active geofences: 0</div>
+                    <div id="trackingDuration">⏱ Tracking duration: 00:00:00</div>
                 </div>
                 
                 <!-- Debug Info (hidden by default) -->
                 <div id="debugInfo" class="debug-info hidden">
-                    <h4>Debug Information</h4>
+                    <h4>🔧 Debug Information</h4>
                     <pre id="debugContent"></pre>
                 </div>
             </div>
         </main>
 
         <footer>
-            <p>🔒 User-consented tracking only | GDPR Compliant | Offline-capable PWA</p>
+            <p>🔒 User-consented tracking only | GDPR Compliant | Offline-capable PWA | Made with ❤️</p>
         </footer>
     </div>
 
-    <!-- Toast notification container (for dynamic notifications) -->
+    <!-- Toast container for notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Third-party libraries with crossorigin -->
+    <!-- Third-party libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
     
-    <!-- Core modules in correct dependency order - local files don't need crossorigin -->
+    <!-- Core modules -->
     <script src="firebase-init.js"></script>
-    <script src="anti-spoof.js"></script>  <!-- Must load before location-engine -->
+    <script src="anti-spoof.js"></script>
     <script src="geofence-engine.js"></script>
     <script src="offline-queue.js"></script>
     <script src="auth.js"></script>
-    <script src="location-engine.js"></script>  <!-- Depends on anti-spoof -->
-    <script src="app.js"></script>  <!-- Initializes everything -->
+    <script src="location-engine.js"></script>
+    <script src="app.js"></script>
 
     <!-- Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registered successfully:', registration.scope);
-                        
-                        // Check for updates
-                        registration.addEventListener('updatefound', () => {
-                            const newWorker = registration.installing;
-                            console.log('ServiceWorker update found:', newWorker);
-                        });
-                    })
-                    .catch(error => {
-                        console.error('ServiceWorker registration failed:', error);
-                        // Show user-friendly message
-                        const statusEl = document.getElementById('connectionStatus');
-                        if (statusEl) {
-                            statusEl.innerHTML = '⚠️ SW Failed';
-                            statusEl.style.background = 'rgba(255, 152, 0, 0.3)';
-                        }
-                    });
+                navigator.serviceWorker.register('/smart-location-tracker/service-worker.js', {
+                    scope: '/smart-location-tracker/'
+                })
+                .then(registration => {
+                    console.log('✅ ServiceWorker registered:', registration.scope);
+                })
+                .catch(error => {
+                    console.error('❌ ServiceWorker registration failed:', error);
+                });
             });
-
-            // Listen for controller change (new service worker activated)
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                console.log('ServiceWorker controller changed');
-                window.location.reload();
-            });
-        } else {
-            console.log('Service workers are not supported in this browser.');
-            // Show message for unsupported browsers
-            const statusEl = document.getElementById('connectionStatus');
-            if (statusEl) {
-                statusEl.innerHTML = '⚠️ No SW Support';
-                statusEl.style.background = 'rgba(255, 152, 0, 0.3)';
-            }
         }
-    </script>
-
-    <!-- Online/Offline Event Listeners -->
-    <script>
-        function updateConnectionStatus() {
-            const statusEl = document.getElementById('connectionStatus');
-            if (navigator.onLine) {
-                statusEl.innerHTML = '🟢 Online';
-                statusEl.className = 'connection-status online';
-            } else {
-                statusEl.innerHTML = '🔴 Offline';
-                statusEl.className = 'connection-status offline';
-            }
-        }
-
-        window.addEventListener('online', updateConnectionStatus);
-        window.addEventListener('offline', updateConnectionStatus);
-        
-        // Initial status
-        updateConnectionStatus();
-
-        // Add error tracking
-        window.addEventListener('error', function(e) {
-            console.error('Global error:', e.error || e.message);
-            // Could display to user in debug mode
-            const debugEl = document.getElementById('debugContent');
-            if (debugEl && !debugEl.closest('.hidden')) {
-                debugEl.textContent += '\n' + new Date().toISOString() + ': ' + (e.error || e.message);
-            }
-        });
-
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('Unhandled promise rejection:', e.reason);
-            const debugEl = document.getElementById('debugContent');
-            if (debugEl && !debugEl.closest('.hidden')) {
-                debugEl.textContent += '\n' + new Date().toISOString() + ': ' + e.reason;
-            }
-        });
-    </script>
-
-    <!-- Debug mode toggle (hidden, can be activated with keyboard shortcut) -->
-    <script>
-        // Enable debug mode with Ctrl+Shift+D
-        let debugMode = false;
-        window.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                debugMode = !debugMode;
-                const debugEl = document.getElementById('debugInfo');
-                if (debugEl) {
-                    if (debugMode) {
-                        debugEl.classList.remove('hidden');
-                        console.log('Debug mode enabled');
-                    } else {
-                        debugEl.classList.add('hidden');
-                        console.log('Debug mode disabled');
-                    }
-                }
-            }
-        });
     </script>
 </body>
 </html>

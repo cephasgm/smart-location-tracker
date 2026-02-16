@@ -1,648 +1,450 @@
-// location-history.js - Professional location playback with timeline and analytics
+// location-engine.js - Core location tracking engine
+// Version 3.0.0 - Handles real-time GPS tracking
 
-class LocationHistory {
+class LocationEngine {
     constructor() {
-        this.trips = [];
-        self.currentTrip = null;
-        self.playbackSpeed = 1;
-        self.isPlaying = false;
-        self.playbackInterval = null;
-        self.timelineChart = null;
-        self.statistics = {
-            totalDistance: 0,
-            totalDuration: 0,
-            averageSpeed: 0,
-            maxSpeed: 0,
-            totalTrips: 0,
-            favoriteLocations: []
-        };
+        this.watchId = null;
+        this.isTracking = false;
+        this.locations = [];
+        this.map = null;
+        this.marker = null;
+        this.polyline = null;
+        this.maxLocations = 1000;
+        this.antiSpoof = null;
+        this.geofenceEngine = null;
+        this.startTime = null;
+        this.trackingInterval = null;
         
-        this.initStorage();
-        this.loadTrips();
-        console.log('📜 LocationHistory initialized');
-    }
-
-    async initStorage() {
-        this.db = await this.openDatabase();
-    }
-
-    openDatabase() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('LocationHistoryDB', 2);
-            
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve(request.result);
-            
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                
-                if (!db.objectStoreNames.contains('trips')) {
-                    const tripStore = db.createObjectStore('trips', { keyPath: 'id', autoIncrement: true });
-                    tripStore.createIndex('date', 'startTime', { unique: false });
-                    tripStore.createIndex('distance', 'distance', { unique: false });
-                }
-                
-                if (!db.objectStoreNames.contains('locations')) {
-                    const locationStore = db.createObjectStore('locations', { keyPath: 'id', autoIncrement: true });
-                    locationStore.createIndex('tripId', 'tripId', { unique: false });
-                    locationStore.createIndex('timestamp', 'timestamp', { unique: false });
-                }
-            };
-        });
-    }
-
-    async saveTrip(locations, metadata = {}) {
-        if (!locations || locations.length === 0) return null;
-
-        const trip = {
-            id: Date.now(),
-            startTime: locations[0].timestamp,
-            endTime: locations[locations.length - 1].timestamp,
-            distance: this.calculateTotalDistance(locations),
-            duration: (locations[locations.length - 1].timestamp - locations[0].timestamp) / 1000,
-            maxSpeed: Math.max(...locations.map(l => l.speed || 0)),
-            avgSpeed: this.calculateAverageSpeed(locations),
-            locations: locations.length,
-            route: this.simplifyRoute(locations),
-            name: metadata.name || `Trip ${new Date(locations[0].timestamp).toLocaleDateString()}`,
-            tags: metadata.tags || [],
-            notes: metadata.notes || '',
-            weather: metadata.weather || null,
-            vehicle: metadata.vehicle || 'car'
-        };
-
-        try {
-            const transaction = this.db.transaction(['trips'], 'readwrite');
-            const store = transaction.objectStore('trips');
-            
-            await new Promise((resolve, reject) => {
-                const request = store.add(trip);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-
-            // Save compressed locations
-            await this.saveTripLocations(trip.id, locations);
-            
-            this.trips.push(trip);
-            this.updateStatistics();
-            
-            return trip;
-        } catch (error) {
-            console.error('Failed to save trip:', error);
-            return null;
-        }
-    }
-
-    async saveTripLocations(tripId, locations) {
-        // Compress locations for storage
-        const compressed = this.compressLocations(locations);
-        
-        const transaction = this.db.transaction(['locations'], 'readwrite');
-        const store = transaction.objectStore('locations');
-        
-        for (const location of compressed) {
-            await new Promise((resolve, reject) => {
-                const request = store.add({
-                    tripId,
-                    ...location,
-                    timestamp: location.timestamp
-                });
-                request.onsuccess = resolve;
-                request.onerror = () => reject(request.error);
-            });
-        }
-    }
-
-    compressLocations(locations, tolerance = 0.0001) {
-        // Ramer-Douglas-Peucker algorithm for route simplification
-        if (locations.length < 3) return locations;
-
-        const result = [];
-        result.push(locations[0]);
-
-        for (let i = 1; i < locations.length - 1; i++) {
-            const prev = locations[i - 1];
-            const curr = locations[i];
-            const next = locations[i + 1];
-
-            // Check if point is significant
-            const distance = this.perpendicularDistance(
-                { lat: curr.lat, lng: curr.lng },
-                { lat: prev.lat, lng: prev.lng },
-                { lat: next.lat, lng: next.lng }
-            );
-
-            if (distance > tolerance) {
-                result.push(curr);
-            }
-        }
-
-        result.push(locations[locations.length - 1]);
-        return result;
-    }
-
-    perpendicularDistance(point, lineStart, lineEnd) {
-        const A = point.lat - lineStart.lat;
-        const B = point.lng - lineStart.lng;
-        const C = lineEnd.lat - lineStart.lat;
-        const D = lineEnd.lng - lineStart.lng;
-
-        const dot = A * C + B * D;
-        const lenSq = C * C + D * D;
-        let param = -1;
-
-        if (lenSq !== 0) {
-            param = dot / lenSq;
-        }
-
-        let xx, yy;
-
-        if (param < 0) {
-            xx = lineStart.lat;
-            yy = lineStart.lng;
-        } else if (param > 1) {
-            xx = lineEnd.lat;
-            yy = lineEnd.lng;
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.init());
         } else {
-            xx = lineStart.lat + param * C;
-            yy = lineStart.lng + param * D;
-        }
-
-        const dx = point.lat - xx;
-        const dy = point.lng - yy;
-
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    async loadTrips() {
-        try {
-            const transaction = this.db.transaction(['trips'], 'readonly');
-            const store = transaction.objectStore('trips');
-            
-            const trips = await new Promise((resolve, reject) => {
-                const request = store.getAll();
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-
-            this.trips = trips.sort((a, b) => b.startTime - a.startTime);
-            this.updateStatistics();
-            
-            return this.trips;
-        } catch (error) {
-            console.error('Failed to load trips:', error);
-            return [];
+            this.init();
         }
     }
 
-    async loadTripLocations(tripId) {
-        try {
-            const transaction = this.db.transaction(['locations'], 'readonly');
-            const store = transaction.objectStore('locations');
-            const index = store.index('tripId');
-            
-            return await new Promise((resolve, reject) => {
-                const request = index.getAll(tripId);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to load trip locations:', error);
-            return [];
-        }
+    init() {
+        this.waitForDependencies();
     }
 
-    // Playback controls
-    async playTrip(tripId, map, speed = 1) {
-        if (this.isPlaying) {
-            this.stopPlayback();
-        }
-
-        const locations = await this.loadTripLocations(tripId);
-        if (!locations || locations.length === 0) return;
-
-        this.currentTrip = {
-            id: tripId,
-            locations: locations.sort((a, b) => a.timestamp - b.timestamp),
-            currentIndex: 0,
-            map: map,
-            marker: this.createPlaybackMarker(map),
-            polyline: this.createPlaybackPolyline(map)
-        };
-
-        this.playbackSpeed = speed;
-        this.isPlaying = true;
-        
-        // Start playback
-        this.playbackInterval = setInterval(() => {
-            this.playbackStep();
-        }, 1000 / speed);
-
-        // Create timeline chart
-        this.createTimelineChart(this.currentTrip.locations);
-        
-        console.log('▶️ Playback started');
-    }
-
-    createPlaybackMarker(map) {
-        const icon = L.divIcon({
-            className: 'playback-marker',
-            html: '🚗',
-            iconSize: [40, 40],
-            popupAnchor: [0, -20]
-        });
-
-        return L.marker([0, 0], { icon }).addTo(map);
-    }
-
-    createPlaybackPolyline(map) {
-        return L.polyline([], {
-            color: '#2196f3',
-            weight: 4,
-            opacity: 0.8
-        }).addTo(map);
-    }
-
-    playbackStep() {
-        if (!this.currentTrip) return;
-
-        const { locations, currentIndex, marker, polyline, map } = this.currentTrip;
-
-        if (currentIndex >= locations.length) {
-            this.stopPlayback();
-            this.showTripSummary();
+    waitForDependencies() {
+        // Check if all dependencies are available
+        if (!window.AntiSpoof) {
+            console.log('⏳ Waiting for AntiSpoof...');
+            setTimeout(() => this.waitForDependencies(), 100);
             return;
         }
 
-        const location = locations[currentIndex];
+        if (!window.GeofenceEngine) {
+            console.log('⏳ Waiting for GeofenceEngine...');
+            setTimeout(() => this.waitForDependencies(), 100);
+            return;
+        }
+
+        if (!window.offlineQueue) {
+            console.log('⏳ Waiting for offlineQueue...');
+            setTimeout(() => this.waitForDependencies(), 100);
+            return;
+        }
+
+        // Initialize dependencies
+        this.antiSpoof = new window.AntiSpoof();
+        this.geofenceEngine = new window.GeofenceEngine();
         
-        // Update marker
-        marker.setLatLng([location.lat, location.lng]);
+        // Initialize map
+        setTimeout(() => this.initMap(), 500);
         
-        // Update polyline
-        const path = locations.slice(0, currentIndex + 1).map(l => [l.lat, l.lng]);
-        polyline.setLatLngs(path);
-        
-        // Update info panel
-        this.updatePlaybackInfo(location, currentIndex, locations.length);
-        
-        // Center map on marker
-        if (currentIndex === 0 || currentIndex % 10 === 0) {
-            map.setView([location.lat, location.lng], 15);
+        console.log('✅ LocationEngine initialized');
+    }
+
+    initMap() {
+        const mapContainer = document.getElementById('map');
+        if (!mapContainer) {
+            console.log('⏳ Waiting for map container...');
+            setTimeout(() => this.initMap(), 500);
+            return;
         }
 
-        this.currentTrip.currentIndex++;
-    }
-
-    updatePlaybackInfo(location, index, total) {
-        const infoEl = document.getElementById('playbackInfo');
-        if (!infoEl) {
-            this.createPlaybackPanel();
+        if (typeof L === 'undefined') {
+            console.log('⏳ Waiting for Leaflet to load...');
+            setTimeout(() => this.initMap(), 500);
+            return;
         }
 
-        const panel = document.getElementById('playbackInfo');
-        if (panel) {
-            panel.innerHTML = `
-                <div class="playback-header">
-                    <h4>▶️ Playback ${Math.round((index / total) * 100)}%</h4>
-                    <button onclick="locationHistory.stopPlayback()">⏹️ Stop</button>
-                </div>
-                <div class="playback-details">
-                    <div>📍 ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}</div>
-                    <div>⏱️ ${new Date(location.timestamp).toLocaleTimeString()}</div>
-                    <div>⚡ ${location.speed?.toFixed(1) || 0} m/s</div>
-                </div>
-                <div class="playback-progress">
-                    <progress value="${index}" max="${total}"></progress>
-                </div>
-            `;
-        }
-    }
+        try {
+            this.map = L.map('map').setView([40.7128, -74.0060], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(this.map);
+            
+            this.userIcon = L.divIcon({
+                className: 'user-location-marker',
+                html: '📍',
+                iconSize: [30, 30],
+                popupAnchor: [0, -15]
+            });
 
-    createPlaybackPanel() {
-        const panel = document.createElement('div');
-        panel.id = 'playbackInfo';
-        panel.className = 'playback-panel';
-        document.querySelector('.map-container').appendChild(panel);
-    }
-
-    createTimelineChart(locations) {
-        const canvas = document.createElement('canvas');
-        canvas.id = 'timelineChart';
-        canvas.style.position = 'absolute';
-        canvas.style.bottom = '20px';
-        canvas.style.left = '20px';
-        canvas.style.right = '20px';
-        canvas.style.height = '100px';
-        canvas.style.background = 'rgba(255,255,255,0.9)';
-        canvas.style.borderRadius = '10px';
-        canvas.style.padding = '10px';
-        canvas.style.zIndex = '1000';
-
-        document.querySelector('.map-container').appendChild(canvas);
-
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-
-        // Draw speed chart
-        ctx.clearRect(0, 0, width, height);
-        ctx.beginPath();
-        ctx.strokeStyle = '#2196f3';
-        ctx.lineWidth = 2;
-
-        const maxSpeed = Math.max(...locations.map(l => l.speed || 0));
-
-        locations.forEach((loc, i) => {
-            const x = (i / locations.length) * width;
-            const y = height - ((loc.speed || 0) / maxSpeed) * height;
-
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-        });
-
-        ctx.stroke();
-    }
-
-    showTripSummary() {
-        if (!this.currentTrip) return;
-
-        const locations = this.currentTrip.locations;
-        const distance = this.calculateTotalDistance(locations);
-        const duration = (locations[locations.length - 1].timestamp - locations[0].timestamp) / 1000;
-        const avgSpeed = distance / duration;
-
-        const summary = `
-            <div class="trip-summary">
-                <h3>🎉 Trip Complete!</h3>
-                <div class="summary-stats">
-                    <div>📏 Distance: ${(distance / 1000).toFixed(2)} km</div>
-                    <div>⏱️ Duration: ${this.formatDuration(duration)}</div>
-                    <div>⚡ Avg Speed: ${(avgSpeed * 3.6).toFixed(1)} km/h</div>
-                    <div>🏁 Max Speed: ${(this.currentTrip.maxSpeed * 3.6).toFixed(1)} km/h</div>
-                </div>
-                <div class="summary-actions">
-                    <button onclick="locationHistory.saveCurrentTrip()">💾 Save Trip</button>
-                    <button onclick="locationHistory.shareTrip()">📤 Share</button>
-                    <button onclick="locationHistory.exportGPX()">📁 Export GPX</button>
-                </div>
-            </div>
-        `;
-
-        const panel = document.getElementById('playbackInfo');
-        if (panel) {
-            panel.innerHTML = summary;
+            console.log('🗺️ Map initialized successfully');
+            this.getInitialLocation();
+        } catch (error) {
+            console.error('❌ Map initialization failed:', error);
         }
     }
 
-    saveCurrentTrip() {
-        if (!this.currentTrip) return;
-
-        const name = prompt('Enter a name for this trip:', `Trip ${new Date().toLocaleDateString()}`);
-        if (name) {
-            this.saveTrip(this.currentTrip.locations, { name });
-            this.showToast('✅ Trip saved successfully');
-        }
-    }
-
-    async shareTrip() {
-        if (!this.currentTrip) return;
-
-        const tripData = {
-            locations: this.currentTrip.locations,
-            stats: this.calculateTripStats(this.currentTrip.locations)
-        };
-
-        const shareData = {
-            title: 'My Trip',
-            text: `Check out my trip! Distance: ${(tripData.stats.distance / 1000).toFixed(2)}km`,
-            url: window.location.href
-        };
-
-        if (navigator.share) {
-            try {
-                await navigator.share(shareData);
-                this.showToast('✅ Trip shared');
-            } catch (error) {
-                console.log('Share cancelled');
-            }
-        } else {
-            // Fallback - copy to clipboard
-            navigator.clipboard.writeText(JSON.stringify(tripData));
-            this.showToast('📋 Trip data copied to clipboard');
-        }
-    }
-
-    exportGPX() {
-        if (!this.currentTrip) return;
-
-        let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Smart Location Tracker">
-  <trk>
-    <name>Trip ${new Date().toISOString()}</name>
-    <trkseg>`;
-
-        this.currentTrip.locations.forEach(loc => {
-            gpx += `
-      <trkpt lat="${loc.lat}" lon="${loc.lng}">
-        <ele>${loc.altitude || 0}</ele>
-        <time>${new Date(loc.timestamp).toISOString()}</time>
-        <speed>${loc.speed || 0}</speed>
-      </trkpt>`;
-        });
-
-        gpx += `
-    </trkseg>
-  </trk>
-</gpx>`;
-
-        // Download GPX file
-        const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `trip-${Date.now()}.gpx`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        this.showToast('📁 GPX file downloaded');
-    }
-
-    stopPlayback() {
-        this.isPlaying = false;
-        if (this.playbackInterval) {
-            clearInterval(this.playbackInterval);
-            this.playbackInterval = null;
-        }
-
-        const panel = document.getElementById('playbackInfo');
-        if (panel) {
-            panel.remove();
-        }
-
-        const chart = document.getElementById('timelineChart');
-        if (chart) {
-            chart.remove();
-        }
-
-        if (this.currentTrip) {
-            if (this.currentTrip.marker) {
-                this.currentTrip.marker.remove();
-            }
-            if (this.currentTrip.polyline) {
-                this.currentTrip.polyline.remove();
-            }
-        }
-
-        console.log('⏹️ Playback stopped');
-    }
-
-    setPlaybackSpeed(speed) {
-        this.playbackSpeed = speed;
-        if (this.isPlaying) {
-            clearInterval(this.playbackInterval);
-            this.playbackInterval = setInterval(() => {
-                this.playbackStep();
-            }, 1000 / speed);
-        }
-    }
-
-    calculateTotalDistance(locations) {
-        let distance = 0;
-        for (let i = 1; i < locations.length; i++) {
-            distance += this.calculateDistance(
-                locations[i-1].lat, locations[i-1].lng,
-                locations[i].lat, locations[i].lng
+    getInitialLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    this.map.setView([latitude, longitude], 15);
+                    
+                    L.marker([latitude, longitude], { icon: this.userIcon })
+                        .addTo(this.map)
+                        .bindPopup('Your current location')
+                        .openPopup();
+                },
+                (error) => {
+                    console.log('Could not get initial location:', error.message);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                }
             );
         }
-        return distance;
     }
 
-    calculateAverageSpeed(locations) {
-        if (locations.length < 2) return 0;
-        
-        const totalSpeed = locations.reduce((sum, loc) => sum + (loc.speed || 0), 0);
-        return totalSpeed / locations.length;
-    }
-
-    calculateTripStats(locations) {
-        return {
-            distance: this.calculateTotalDistance(locations),
-            duration: (locations[locations.length - 1].timestamp - locations[0].timestamp) / 1000,
-            maxSpeed: Math.max(...locations.map(l => l.speed || 0)),
-            avgSpeed: this.calculateAverageSpeed(locations),
-            startTime: locations[0].timestamp,
-            endTime: locations[locations.length - 1].timestamp,
-            pointCount: locations.length
-        };
-    }
-
-    calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3;
-        const φ1 = lat1 * Math.PI / 180;
-        const φ2 = lat2 * Math.PI / 180;
-        const Δφ = (lat2 - lat1) * Math.PI / 180;
-        const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-        return R * c;
-    }
-
-    simplifyRoute(locations, maxPoints = 100) {
-        if (locations.length <= maxPoints) return locations;
-
-        // Simple downsampling - take every nth point
-        const step = Math.floor(locations.length / maxPoints);
-        return locations.filter((_, i) => i % step === 0);
-    }
-
-    formatDuration(seconds) {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-
-        if (hours > 0) {
-            return `${hours}h ${minutes}m ${secs}s`;
-        } else if (minutes > 0) {
-            return `${minutes}m ${secs}s`;
+    async requestLocationPermission() {
+        if (!navigator.geolocation) {
+            throw new Error('Geolocation is not supported by this browser');
         }
-        return `${secs}s`;
-    }
 
-    updateStatistics() {
-        this.statistics.totalTrips = this.trips.length;
-        this.statistics.totalDistance = this.trips.reduce((sum, t) => sum + t.distance, 0);
-        this.statistics.totalDuration = this.trips.reduce((sum, t) => sum + t.duration, 0);
-        this.statistics.averageSpeed = this.statistics.totalDistance / this.statistics.totalDuration;
-        this.statistics.maxSpeed = Math.max(...this.trips.map(t => t.maxSpeed));
-    }
-
-    getTripsByDate(startDate, endDate) {
-        return this.trips.filter(t => 
-            t.startTime >= startDate.getTime() && 
-            t.startTime <= endDate.getTime()
-        );
-    }
-
-    getTripsByTag(tag) {
-        return this.trips.filter(t => t.tags && t.tags.includes(tag));
-    }
-
-    async deleteTrip(tripId) {
         try {
-            // Delete trip
-            const tripTransaction = this.db.transaction(['trips'], 'readwrite');
-            const tripStore = tripTransaction.objectStore('trips');
-            await new Promise((resolve, reject) => {
-                const request = tripStore.delete(tripId);
-                request.onsuccess = resolve;
-                request.onerror = () => reject(request.error);
-            });
-
-            // Delete locations
-            const locTransaction = this.db.transaction(['locations'], 'readwrite');
-            const locStore = locTransaction.objectStore('locations');
-            const index = locStore.index('tripId');
-            
-            const locations = await new Promise((resolve, reject) => {
-                const request = index.getAll(tripId);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-
-            for (const loc of locations) {
-                await new Promise((resolve, reject) => {
-                    const request = locStore.delete(loc.id);
-                    request.onsuccess = resolve;
-                    request.onerror = () => reject(request.error);
-                });
-            }
-
-            this.trips = this.trips.filter(t => t.id !== tripId);
-            this.updateStatistics();
-            this.showToast('✅ Trip deleted');
-            
+            const permission = await navigator.permissions.query({ name: 'geolocation' });
+            return permission.state;
         } catch (error) {
-            console.error('Failed to delete trip:', error);
-            this.showToast('❌ Failed to delete trip', 'error');
+            console.warn('Permission API not supported');
+            return 'prompt';
         }
     }
 
-    showToast(message, type = 'success') {
-        if (window.app && window.app.showToast) {
-            window.app.showToast(message, type);
+    startTracking() {
+        if (!navigator.geolocation) {
+            this.showError('Geolocation not supported');
+            return;
         }
+
+        const options = {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 10000
+        };
+
+        this.watchId = navigator.geolocation.watchPosition(
+            this.handleLocationUpdate.bind(this),
+            this.handleLocationError.bind(this),
+            options
+        );
+
+        this.isTracking = true;
+        this.startTime = Date.now();
+        this.updateTrackingUI();
+        
+        // Start tracking duration counter
+        this.trackingInterval = setInterval(() => {
+            this.updateTrackingDuration();
+        }, 1000);
+        
+        console.log('📍 Started tracking');
+        this.showSuccess('Tracking started');
+        
+        if (window.analytics) {
+            window.analytics.trackEvent('tracking_started');
+        }
+    }
+
+    stopTracking() {
+        if (this.watchId !== null) {
+            navigator.geolocation.clearWatch(this.watchId);
+            this.watchId = null;
+        }
+        
+        this.isTracking = false;
+        
+        if (this.trackingInterval) {
+            clearInterval(this.trackingInterval);
+            this.trackingInterval = null;
+        }
+        
+        this.updateTrackingUI();
+        console.log('⏹️ Stopped tracking');
+        this.showSuccess('Tracking stopped');
+        
+        if (window.analytics) {
+            window.analytics.trackEvent('tracking_stopped');
+        }
+    }
+
+    async handleLocationUpdate(position) {
+        const { latitude, longitude, accuracy, speed, heading, altitude } = position.coords;
+        const timestamp = position.timestamp;
+
+        const locationData = {
+            lat: latitude,
+            lng: longitude,
+            accuracy,
+            speed: speed || 0,
+            heading: heading || 0,
+            altitude: altitude || 0,
+            timestamp
+        };
+
+        // Anti-spoofing check
+        if (this.antiSpoof && !this.antiSpoof.validateLocation(locationData)) {
+            console.warn('⚠️ Potential location spoofing detected');
+            this.showWarning('Location spoofing detected!');
+            return;
+        }
+
+        // Geofence check
+        if (this.geofenceEngine) {
+            const geofenceAlerts = this.geofenceEngine.checkGeofences(locationData);
+            if (geofenceAlerts.length > 0) {
+                this.handleGeofenceAlerts(geofenceAlerts);
+            }
+        }
+
+        // Update UI
+        this.updateLocationUI(locationData);
+
+        // Update map
+        this.updateMap(latitude, longitude);
+
+        // Save location
+        await this.saveLocation({
+            ...locationData,
+            userId: window.authManager?.currentUser?.uid
+        });
+
+        // Add to trail
+        this.addToTrail(latitude, longitude);
+        
+        // Track in analytics
+        if (window.analytics) {
+            window.analytics.trackLocationUpdate(locationData);
+        }
+    }
+
+    handleLocationError(error) {
+        let message = 'Location error: ';
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                message += 'User denied the request for geolocation.';
+                break;
+            case error.POSITION_UNAVAILABLE:
+                message += 'Location information is unavailable.';
+                break;
+            case error.TIMEOUT:
+                message += 'The request to get user location timed out.';
+                break;
+            default:
+                message += 'An unknown error occurred.';
+        }
+        
+        this.showError(message);
+        const locationStatus = document.getElementById('locationStatus');
+        if (locationStatus) {
+            locationStatus.textContent = '⚠️ ' + message;
+            locationStatus.className = 'status-error';
+        }
+    }
+
+    async saveLocation(locationData) {
+        // Add to local array
+        this.locations.push(locationData);
+        
+        // Limit array size
+        if (this.locations.length > this.maxLocations) {
+            this.locations.shift();
+        }
+
+        // Update UI
+        const totalPoints = document.getElementById('totalPoints');
+        if (totalPoints) {
+            totalPoints.textContent = `📍 Points tracked: ${this.locations.length}`;
+        }
+
+        // Always queue offline for redundancy
+        if (window.offlineQueue) {
+            await window.offlineQueue.queueLocation(locationData);
+        }
+
+        // Try to sync to Firestore if online
+        if (navigator.onLine && window.firebaseServices && window.authManager?.currentUser) {
+            try {
+                const db = window.firebaseServices.db;
+                await db.collection('locations').add({
+                    userId: window.authManager.currentUser.uid,
+                    ...locationData,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log('✅ Location saved to Firestore');
+            } catch (error) {
+                console.log('📍 Location queued for later sync');
+            }
+        }
+    }
+
+    updateMap(lat, lng) {
+        if (!this.map) return;
+
+        if (this.marker) {
+            this.marker.setLatLng([lat, lng]);
+        } else {
+            this.marker = L.marker([lat, lng], { icon: this.userIcon }).addTo(this.map);
+        }
+
+        this.map.setView([lat, lng], this.map.getZoom());
+
+        this.marker.bindPopup(`
+            <b>Current Location</b><br>
+            Lat: ${lat.toFixed(6)}<br>
+            Lng: ${lng.toFixed(6)}<br>
+            ${new Date().toLocaleTimeString()}
+        `).openPopup();
+    }
+
+    addToTrail(lat, lng) {
+        if (!this.map) return;
+
+        const latlngs = this.locations.map(loc => [loc.lat, loc.lng]);
+        
+        if (this.polyline) {
+            this.polyline.setLatLngs(latlngs);
+        } else {
+            this.polyline = L.polyline(latlngs, { color: 'blue' }).addTo(this.map);
+        }
+    }
+
+    updateLocationUI(location) {
+        const coordinatesEl = document.getElementById('coordinates');
+        const accuracyEl = document.getElementById('accuracy');
+        const altitudeEl = document.getElementById('altitude');
+        const speedEl = document.getElementById('speed');
+        const timestampEl = document.getElementById('timestamp');
+        const statusEl = document.getElementById('locationStatus');
+
+        if (coordinatesEl) {
+            coordinatesEl.innerHTML = `🌐 Latitude: ${location.lat.toFixed(6)}, Longitude: ${location.lng.toFixed(6)}`;
+        }
+        
+        if (accuracyEl) {
+            accuracyEl.innerHTML = `🎯 Accuracy: ${location.accuracy.toFixed(1)} meters`;
+        }
+        
+        if (altitudeEl) {
+            altitudeEl.innerHTML = `⛰ Altitude: ${location.altitude?.toFixed(1) || 0} meters`;
+        }
+        
+        if (speedEl) {
+            speedEl.innerHTML = `⚡ Speed: ${location.speed?.toFixed(1) || 0} m/s`;
+        }
+        
+        if (timestampEl) {
+            timestampEl.innerHTML = `🕐 Last update: ${new Date(location.timestamp).toLocaleTimeString()}`;
+        }
+        
+        if (statusEl) {
+            if (location.accuracy < 20) {
+                statusEl.textContent = '✅ High accuracy GPS fix';
+                statusEl.className = 'status-success';
+            } else if (location.accuracy < 50) {
+                statusEl.textContent = '⚠️ Medium accuracy';
+                statusEl.className = 'status-warning';
+            } else {
+                statusEl.textContent = '🔴 Low accuracy';
+                statusEl.className = 'status-error';
+            }
+        }
+    }
+
+    updateTrackingUI() {
+        const startBtn = document.getElementById('startTrackingBtn');
+        const stopBtn = document.getElementById('stopTrackingBtn');
+        
+        if (startBtn) startBtn.disabled = this.isTracking;
+        if (stopBtn) stopBtn.disabled = !this.isTracking;
+    }
+
+    updateTrackingDuration() {
+        if (!this.isTracking || !this.startTime) return;
+        
+        const duration = Math.floor((Date.now() - this.startTime) / 1000);
+        const durationEl = document.getElementById('trackingDuration');
+        
+        if (durationEl) {
+            const hours = Math.floor(duration / 3600);
+            const minutes = Math.floor((duration % 3600) / 60);
+            const seconds = duration % 60;
+            
+            durationEl.innerHTML = `⏱ Tracking duration: ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    handleGeofenceAlerts(alerts) {
+        const geofenceStatus = document.getElementById('geofenceStatus');
+        if (geofenceStatus) {
+            geofenceStatus.innerHTML = alerts.map(alert => 
+                `<div class="geofence-alert">${alert.message}</div>`
+            ).join('');
+            geofenceStatus.className = 'status-info';
+        }
+        
+        if ('Notification' in window && Notification.permission === 'granted') {
+            alerts.forEach(alert => {
+                new Notification('Geofence Alert', {
+                    body: alert.message,
+                    icon: 'icon-192x192.png'
+                });
+            });
+        }
+        
+        if (window.analytics) {
+            alerts.forEach(alert => {
+                window.analytics.trackGeofenceEvent(alert.type, alert.fence);
+            });
+        }
+    }
+
+    showSuccess(message) {
+        if (window.app && window.app.showToast) {
+            window.app.showToast(message, 'success');
+        }
+    }
+
+    showError(message) {
+        if (window.app && window.app.showToast) {
+            window.app.showToast(message, 'error');
+        }
+    }
+
+    showWarning(message) {
+        if (window.app && window.app.showToast) {
+            window.app.showToast(message, 'warning');
+        }
+    }
+
+    getLastKnownLocation() {
+        if (this.locations.length > 0) {
+            return this.locations[this.locations.length - 1];
+        }
+        return null;
     }
 }
 
-// Initialize location history
-const locationHistory = new LocationHistory();
-window.locationHistory = locationHistory;
+// Initialize location engine
+const locationEngine = new LocationEngine();
+window.locationEngine = locationEngine;

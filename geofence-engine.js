@@ -1,201 +1,301 @@
-class GeofenceEngine {
+class EnhancedGeofenceEngine extends GeofenceEngine {
     constructor() {
-        this.geofences = [];
-        // Wait for authManager to be available
-        this.waitForAuth();
+        super();
+        this.geofenceHistory = [];
+        this.geofenceRules = [];
+        this.initEnhancedFeatures();
     }
 
-    waitForAuth() {
-        if (!window.authManager) {
-            console.log('⏳ Waiting for authManager...');
-            setTimeout(() => this.waitForAuth(), 100);
+    initEnhancedFeatures() {
+        this.loadGeofenceRules();
+        this.initGeofenceUI();
+    }
+
+    initGeofenceUI() {
+        const trackingSection = document.querySelector('.tracking-section');
+        if (!trackingSection) return;
+
+        const geofencePanel = document.createElement('div');
+        geofencePanel.className = 'geofence-panel';
+        geofencePanel.innerHTML = `
+            <div class="geofence-header">
+                <h3>🚧 Advanced Geofencing</h3>
+                <button class="btn btn-add" id="addGeofenceBtn">+ Add Geofence</button>
+            </div>
+            <div class="geofence-list" id="geofenceList">
+                ${this.renderGeofenceList()}
+            </div>
+            <div class="geofence-history" id="geofenceHistory">
+                <h4>Recent Alerts</h4>
+                <div class="history-list" id="geofenceHistoryList"></div>
+            </div>
+        `;
+
+        // Insert after location info
+        const locationInfo = document.querySelector('.location-info');
+        if (locationInfo) {
+            locationInfo.parentNode.insertBefore(geofencePanel, locationInfo.nextSibling);
+        }
+
+        this.attachGeofenceEvents();
+    }
+
+    renderGeofenceList() {
+        if (this.geofences.length === 0) {
+            return '<div class="no-geofences">No geofences configured</div>';
+        }
+
+        return this.geofences.map(fence => `
+            <div class="geofence-item" data-id="${fence.id}">
+                <div class="geofence-info">
+                    <span class="geofence-name">${fence.name}</span>
+                    <span class="geofence-details">📍 ${fence.radius}m radius</span>
+                </div>
+                <div class="geofence-actions">
+                    <button class="btn-icon edit" title="Edit">✏️</button>
+                    <button class="btn-icon delete" title="Delete">🗑️</button>
+                    <button class="btn-icon history" title="History">📊</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    attachGeofenceEvents() {
+        document.getElementById('addGeofenceBtn')?.addEventListener('click', () => {
+            this.showGeofenceDialog();
+        });
+
+        document.querySelectorAll('.geofence-item .edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.closest('.geofence-item').dataset.id;
+                this.editGeofence(id);
+            });
+        });
+
+        document.querySelectorAll('.geofence-item .delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.closest('.geofence-item').dataset.id;
+                this.deleteGeofence(id);
+            });
+        });
+
+        document.querySelectorAll('.geofence-item .history').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.closest('.geofence-item').dataset.id;
+                this.showGeofenceHistory(id);
+            });
+        });
+    }
+
+    showGeofenceDialog(fence = null) {
+        const dialog = document.createElement('div');
+        dialog.className = 'dialog-overlay';
+        dialog.innerHTML = `
+            <div class="dialog-content">
+                <h3>${fence ? 'Edit' : 'Add'} Geofence</h3>
+                <div class="dialog-form">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="fenceName" value="${fence?.name || ''}" placeholder="e.g., Home, Office">
+                    </div>
+                    <div class="form-group">
+                        <label>Radius (meters)</label>
+                        <input type="number" id="fenceRadius" value="${fence?.radius || 100}" min="10" max="10000">
+                    </div>
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="fenceType">
+                            <option value="circle" ${fence?.type === 'circle' ? 'selected' : ''}>Circle</option>
+                            <option value="polygon" ${fence?.type === 'polygon' ? 'selected' : ''}>Polygon</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Actions</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" id="notifyEntry" ${fence?.notifyEntry ? 'checked' : ''}> Notify on entry</label>
+                            <label><input type="checkbox" id="notifyExit" ${fence?.notifyExit ? 'checked' : ''}> Notify on exit</label>
+                            <label><input type="checkbox" id="notifyDwell" ${fence?.notifyDwell ? 'checked' : ''}> Notify on dwell</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Dwell time (minutes)</label>
+                        <input type="number" id="dwellTime" value="${fence?.dwellTime || 5}" min="1" max="60">
+                    </div>
+                </div>
+                <div class="dialog-actions">
+                    <button class="btn btn-secondary" id="cancelDialog">Cancel</button>
+                    <button class="btn btn-primary" id="saveGeofence">${fence ? 'Update' : 'Create'}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        document.getElementById('cancelDialog').addEventListener('click', () => dialog.remove());
+        
+        document.getElementById('saveGeofence').addEventListener('click', () => {
+            const fenceData = {
+                name: document.getElementById('fenceName').value,
+                radius: parseInt(document.getElementById('fenceRadius').value),
+                type: document.getElementById('fenceType').value,
+                notifyEntry: document.getElementById('notifyEntry').checked,
+                notifyExit: document.getElementById('notifyExit').checked,
+                notifyDwell: document.getElementById('notifyDwell').checked,
+                dwellTime: parseInt(document.getElementById('dwellTime').value)
+            };
+
+            if (fence) {
+                this.updateGeofence(fence.id, fenceData);
+            } else {
+                this.addGeofenceWithCurrentLocation(fenceData);
+            }
+            
+            dialog.remove();
+        });
+    }
+
+    async addGeofenceWithCurrentLocation(fenceData) {
+        const currentPos = window.locationEngine?.getLastKnownLocation();
+        if (!currentPos) {
+            this.showToast('❌ No location available', 'error');
             return;
         }
-        this.loadGeofences();
-    }
 
-    async loadGeofences() {
         try {
-            // Load geofences from Firestore if authenticated
-            if (window.authManager && window.authManager.currentUser) {
-                const db = window.firebaseServices.db;
-                const snapshot = await db.collection('geofences')
-                    .where('userId', '==', window.authManager.currentUser.uid)
-                    .get();
-                
-                this.geofences = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                console.log(`✅ Loaded ${this.geofences.length} geofences`);
-            } else {
-                // Load default geofences as fallback
-                this.loadDefaultGeofences();
-            }
+            await this.addGeofence(
+                fenceData.name,
+                currentPos.lat,
+                currentPos.lng,
+                fenceData.radius,
+                fenceData.type
+            );
+            
+            // Add additional properties
+            const newFence = this.geofences[this.geofences.length - 1];
+            Object.assign(newFence, fenceData);
+            
+            this.refreshGeofenceList();
+            this.showToast('✅ Geofence added', 'success');
         } catch (error) {
-            console.error('❌ Failed to load geofences:', error);
-            this.loadDefaultGeofences();
+            console.error('Failed to add geofence:', error);
+            this.showToast('❌ Failed to add geofence', 'error');
         }
     }
 
-    loadDefaultGeofences() {
-        this.geofences = [
-            {
-                id: 'home',
-                name: 'Home',
-                lat: 40.7128,
-                lng: -74.0060,
-                radius: 100, // meters
-                type: 'circle'
-            },
-            {
-                id: 'work',
-                name: 'Work',
-                lat: 40.7580,
-                lng: -73.9855,
-                radius: 200,
-                type: 'circle'
+    async updateGeofence(id, fenceData) {
+        const fence = this.geofences.find(f => f.id === id);
+        if (!fence) return;
+
+        Object.assign(fence, fenceData);
+        
+        // Update in Firestore if needed
+        if (!id.startsWith('local_')) {
+            try {
+                const db = window.firebaseServices.db;
+                await db.collection('geofences').doc(id).update(fenceData);
+            } catch (error) {
+                console.error('Failed to update geofence:', error);
             }
-        ];
-        console.log('📦 Loaded default geofences');
+        }
+
+        this.refreshGeofenceList();
+        this.showToast('✅ Geofence updated', 'success');
+    }
+
+    async deleteGeofence(id) {
+        if (!confirm('Are you sure you want to delete this geofence?')) return;
+
+        try {
+            await this.removeGeofence(id);
+            this.refreshGeofenceList();
+            this.showToast('✅ Geofence deleted', 'success');
+        } catch (error) {
+            console.error('Failed to delete geofence:', error);
+            this.showToast('❌ Failed to delete geofence', 'error');
+        }
+    }
+
+    refreshGeofenceList() {
+        const listElement = document.getElementById('geofenceList');
+        if (listElement) {
+            listElement.innerHTML = this.renderGeofenceList();
+            this.attachGeofenceEvents();
+        }
     }
 
     checkGeofences(location) {
-        const alerts = [];
+        const alerts = super.checkGeofences(location);
         
-        for (const fence of this.geofences) {
-            const distance = this.calculateDistance(
-                fence.lat, fence.lng,
-                location.lat, location.lng
-            );
-
-            const previousDistance = this.getPreviousDistance(fence.id, location);
-
-            // Check for entry
-            if (distance <= fence.radius && previousDistance > fence.radius) {
-                alerts.push({
-                    type: 'entry',
-                    fence: fence.name,
-                    message: `📍 Entered ${fence.name}`,
-                    location,
-                    timestamp: Date.now()
-                });
+        // Add enhanced checks
+        alerts.forEach(alert => {
+            this.addToGeofenceHistory(alert);
+            
+            // Enhanced notifications
+            if (alert.type === 'entry') {
+                this.showEnhancedNotification(alert);
             }
-
-            // Check for exit
-            if (distance > fence.radius && previousDistance <= fence.radius) {
-                alerts.push({
-                    type: 'exit',
-                    fence: fence.name,
-                    message: `🚪 Exited ${fence.name}`,
-                    location,
-                    timestamp: Date.now()
-                });
-            }
-
-            // Save current distance for next check
-            this.saveDistance(fence.id, location, distance);
-        }
+        });
 
         return alerts;
     }
 
-    calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3;
-        const φ1 = this.toRadians(lat1);
-        const φ2 = this.toRadians(lat2);
-        const Δφ = this.toRadians(lat2 - lat1);
-        const Δλ = this.toRadians(lon2 - lon1);
+    addToGeofenceHistory(alert) {
+        this.geofenceHistory.unshift({
+            ...alert,
+            timestamp: new Date().toLocaleString()
+        });
 
-        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-        return R * c;
-    }
-
-    toRadians(degrees) {
-        return degrees * Math.PI / 180;
-    }
-
-    getPreviousDistance(fenceId, location) {
-        const key = `geofence_${fenceId}`;
-        const data = localStorage.getItem(key);
-        
-        if (data) {
-            try {
-                const { distance, timestamp } = JSON.parse(data);
-                // Only use data from last 5 minutes
-                if (Date.now() - timestamp < 300000) {
-                    return distance;
-                }
-            } catch (e) {
-                console.error('Failed to parse previous distance:', e);
-            }
+        // Keep only last 50 alerts
+        if (this.geofenceHistory.length > 50) {
+            this.geofenceHistory.pop();
         }
-        
-        return Infinity;
+
+        this.updateGeofenceHistoryUI();
     }
 
-    saveDistance(fenceId, location, distance) {
-        const key = `geofence_${fenceId}`;
-        const data = {
-            distance,
-            timestamp: Date.now(),
-            location: {
-                lat: location.lat,
-                lng: location.lng
-            }
-        };
-        
-        localStorage.setItem(key, JSON.stringify(data));
+    updateGeofenceHistoryUI() {
+        const historyList = document.getElementById('geofenceHistoryList');
+        if (!historyList) return;
+
+        historyList.innerHTML = this.geofenceHistory.map(alert => `
+            <div class="history-item ${alert.type}">
+                <span class="history-icon">${alert.type === 'entry' ? '📍' : '🚪'}</span>
+                <span class="history-message">${alert.message}</span>
+                <span class="history-time">${alert.timestamp}</span>
+            </div>
+        `).join('');
     }
 
-    async addGeofence(name, lat, lng, radius, type = 'circle') {
-        const fence = {
-            name,
-            lat,
-            lng,
-            radius,
-            type,
-            userId: window.authManager?.currentUser?.uid,
-            createdAt: new Date().toISOString()
-        };
+    showEnhancedNotification(alert) {
+        // Show toast
+        this.showToast(alert.message, 'info');
 
-        try {
-            if (window.authManager?.currentUser) {
-                const db = window.firebaseServices.db;
-                const docRef = await db.collection('geofences').add(fence);
-                fence.id = docRef.id;
-            } else {
-                fence.id = `local_${Date.now()}`;
-            }
-
-            this.geofences.push(fence);
-            console.log(`✅ Added geofence: ${name}`);
-            return fence;
-        } catch (error) {
-            console.error('❌ Failed to add geofence:', error);
-            throw error;
+        // Show system notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Geofence Alert', {
+                body: alert.message,
+                icon: 'icon-192x192.png',
+                badge: 'icon-72x72.png',
+                vibrate: [200, 100, 200]
+            });
         }
+
+        // Play sound if enabled
+        this.playAlertSound();
     }
 
-    async removeGeofence(fenceId) {
-        try {
-            if (window.authManager?.currentUser && !fenceId.startsWith('local_')) {
-                const db = window.firebaseServices.db;
-                await db.collection('geofences').doc(fenceId).delete();
-            }
+    playAlertSound() {
+        const audio = new Audio();
+        audio.src = 'data:audio/wav;base64,UklGRlwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAAA8';
+        audio.play().catch(e => console.log('Audio play failed:', e));
+    }
 
-            this.geofences = this.geofences.filter(f => f.id !== fenceId);
-            console.log(`✅ Removed geofence: ${fenceId}`);
-        } catch (error) {
-            console.error('❌ Failed to remove geofence:', error);
-            throw error;
+    showToast(message, type) {
+        if (window.app && window.app.showToast) {
+            window.app.showToast(message, type);
         }
     }
 }
 
-// Make it globally available
-window.GeofenceEngine = GeofenceEngine;
+// Override the global GeofenceEngine
+window.GeofenceEngine = EnhancedGeofenceEngine;

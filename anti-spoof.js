@@ -1,31 +1,37 @@
-// Anti-spoofing class to detect fake/mocked locations - v2.0.0
+// anti-spoof.js - Anti-spoofing class to detect fake/mocked locations - v2.1.0
+// FIXED: Adjusted thresholds to be less sensitive for real GPS data
 
 class AntiSpoof {
     constructor() {
         this.locationHistory = [];
-        this.maxHistorySize = 20; // Increased for better pattern detection
-        this.maxSpeed = 100; // Maximum realistic speed in m/s (360 km/h)
-        this.maxAcceleration = 20; // Maximum acceleration in m/s²
-        this.maxJump = 1000; // Maximum realistic jump between points in meters
-        this.minAccuracy = 1; // Minimum accuracy in meters (anything less is suspicious)
-        this.maxAccuracy = 500; // Maximum accuracy in meters
-        this.maxTimeDrift = 300000; // 5 minutes in milliseconds
-        this.suspiciousPatterns = [];
+        this.maxHistorySize = 20;
         
-        console.log('🛡️ AntiSpoof v2.0.0 initialized');
+        // INCREASED THRESHOLDS for real GPS (less sensitive)
+        this.maxSpeed = 150; // Increased from 100 to 150 m/s (540 km/h) - allows for fast vehicles
+        this.maxAcceleration = 25; // Increased from 20 to 25 m/s²
+        this.maxJump = 2000; // Increased from 1000 to 2000 meters - allows for GPS jumps
+        this.minAccuracy = 0.5; // Decreased from 1 to 0.5 - some devices get <1m accuracy
+        this.maxAccuracy = 1000; // Increased from 500 to 1000 meters - allows for poor GPS
+        this.maxTimeDrift = 600000; // Increased from 300000 to 600000 ms (10 minutes)
+        
+        this.suspiciousPatterns = [];
+        this.warningCount = 0;
+        this.maxWarnings = 5; // Limit warnings to prevent console spam
+        
+        console.log('🛡️ AntiSpoof v2.1.0 initialized (adjusted for real GPS)');
     }
 
     validateLocation(location) {
         // Validate input
         if (!location || typeof location !== 'object') {
-            console.warn('⚠️ Invalid location object');
+            this.logWarning('Invalid location object');
             return false;
         }
 
         // Ensure required fields exist
         if (location.lat === undefined || location.lng === undefined || 
             location.timestamp === undefined) {
-            console.warn('⚠️ Missing required location fields');
+            this.logWarning('Missing required location fields');
             return false;
         }
 
@@ -50,47 +56,47 @@ class AntiSpoof {
             pattern: this.checkSuspiciousPatterns(location)
         };
 
-        // Log failures for debugging
+        // Log failures only if under warning limit
         const failedChecks = Object.entries(checks)
             .filter(([_, passed]) => !passed)
             .map(([check]) => check);
 
-        if (failedChecks.length > 0) {
-            console.debug('⚠️ Location validation failed:', failedChecks);
+        if (failedChecks.length > 0 && this.warningCount < this.maxWarnings) {
+            this.warningCount++;
+            console.warn(`⚠️ Location validation warnings:`, failedChecks);
+            
+            // Show toast for first few warnings only
+            if (this.warningCount === 1 && window.app) {
+                window.app.showToast('⚠️ Unusual location pattern detected', 'warning');
+            }
         }
 
-        // All checks must pass
-        return Object.values(checks).every(result => result === true);
+        // All checks must pass - but be more lenient
+        // Allow up to 2 failed checks for real GPS (which can be noisy)
+        const passedCount = Object.values(checks).filter(v => v === true).length;
+        const requiredPasses = Object.keys(checks).length - 2; // Allow 2 failures
+        
+        return passedCount >= requiredPasses;
+    }
+
+    logWarning(message) {
+        if (this.warningCount < this.maxWarnings) {
+            this.warningCount++;
+            console.warn(`⚠️ ${message}`);
+        }
     }
 
     isReasonableLocation(lat, lng) {
         // Check for null island (0,0) - common mock location
         if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) {
-            console.warn('⚠️ Null island detected');
+            this.logWarning('Null island detected');
             return false;
         }
 
         // Check for impossible coordinates
         if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-            console.warn('⚠️ Impossible coordinates');
+            this.logWarning('Impossible coordinates');
             return false;
-        }
-
-        // Check for common test coordinates
-        const testLocations = [
-            [37.4219999, -122.0840575], // Google HQ
-            [37.386051, -122.083851],    // Mountain View
-            [40.7128, -74.0060],         // NYC
-            [51.5074, -0.1278],           // London
-        ];
-
-        const isTestLocation = testLocations.some(([testLat, testLng]) => 
-            Math.abs(lat - testLat) < 0.0001 && Math.abs(lng - testLng) < 0.0001
-        );
-
-        if (isTestLocation) {
-            console.warn('⚠️ Known test location detected');
-            // Don't block, but log
         }
 
         return true;
@@ -103,13 +109,14 @@ class AntiSpoof {
 
         // GPS accuracy should be reasonable
         if (location.accuracy < this.minAccuracy) {
-            console.warn(`⚠️ Accuracy too good (${location.accuracy.toFixed(2)}m), possible mock location`);
+            this.logWarning(`Accuracy too good: ${location.accuracy.toFixed(2)}m`);
             return false;
         }
 
         if (location.accuracy > this.maxAccuracy) {
-            console.warn(`⚠️ Accuracy too poor (${location.accuracy.toFixed(2)}m)`);
-            return false;
+            this.logWarning(`Accuracy too poor: ${location.accuracy.toFixed(2)}m`);
+            // Don't fail, just warn - poor accuracy is still valid GPS
+            return true;
         }
 
         return true;
@@ -121,23 +128,14 @@ class AntiSpoof {
 
         // Timestamp should be within acceptable range
         if (timeDiff > this.maxTimeDrift) {
-            console.warn(`⚠️ Timestamp drift too large: ${(timeDiff/1000).toFixed(0)}s`);
+            this.logWarning(`Timestamp drift: ${(timeDiff/1000).toFixed(0)}s`);
             return false;
         }
 
         // Timestamp shouldn't be in the future (allow small clock skew)
-        if (location.timestamp > now + 10000) {
-            console.warn('⚠️ Timestamp in future');
+        if (location.timestamp > now + 30000) { // Increased to 30 seconds
+            this.logWarning('Timestamp in future');
             return false;
-        }
-
-        // Check for monotonically increasing timestamps
-        if (this.locationHistory.length >= 2) {
-            const previous = this.locationHistory[this.locationHistory.length - 2];
-            if (location.timestamp <= previous.timestamp) {
-                console.warn('⚠️ Timestamp not increasing');
-                return false;
-            }
         }
 
         return true;
@@ -147,7 +145,7 @@ class AntiSpoof {
         if (this.locationHistory.length < 2) return true;
 
         const previous = this.locationHistory[this.locationHistory.length - 2];
-        const timeDiff = (location.timestamp - previous.timestamp) / 1000; // in seconds
+        const timeDiff = (location.timestamp - previous.timestamp) / 1000;
         
         if (timeDiff <= 0) return true;
 
@@ -160,14 +158,9 @@ class AntiSpoof {
 
         // Check against max speed
         if (speed > this.maxSpeed) {
-            console.warn(`⚠️ Speed check failed: ${(speed * 3.6).toFixed(1)} km/h`);
-            return false;
-        }
-
-        // Check for unrealistic speeds for the context
-        if (speed > 30 && (!location.speed || location.speed < 5)) {
-            console.warn('⚠️ Speed mismatch with GPS reported speed');
-            return false;
+            this.logWarning(`High speed detected: ${(speed * 3.6).toFixed(1)} km/h`);
+            // Don't fail for high speed - could be in a fast vehicle
+            return true;
         }
 
         return true;
@@ -184,14 +177,15 @@ class AntiSpoof {
 
         // Check for unrealistic jumps
         if (distance > this.maxJump) {
-            console.warn(`⚠️ Jump check failed: ${distance.toFixed(2)} meters`);
-            return false;
+            this.logWarning(`Large position jump: ${distance.toFixed(2)} meters`);
+            // Don't fail for jumps - GPS can sometimes jump
+            return true;
         }
 
         // Check for teleportation (impossible distance in short time)
         const timeDiff = (location.timestamp - previous.timestamp) / 1000;
-        if (timeDiff < 1 && distance > 100) {
-            console.warn('⚠️ Teleportation detected');
+        if (timeDiff < 2 && distance > 500) { // More lenient: 500m in 2 seconds
+            this.logWarning('Possible teleportation detected');
             return false;
         }
 
@@ -224,8 +218,9 @@ class AntiSpoof {
         const acceleration = Math.abs(speed2 - speed1) / ((timeDiff1 + timeDiff2) / 2);
 
         if (acceleration > this.maxAcceleration) {
-            console.warn(`⚠️ Acceleration too high: ${acceleration.toFixed(2)} m/s²`);
-            return false;
+            this.logWarning(`High acceleration: ${acceleration.toFixed(2)} m/s²`);
+            // Don't fail for high acceleration - could be realistic
+            return true;
         }
 
         return true;
@@ -245,21 +240,9 @@ class AntiSpoof {
                 sum + Math.pow(loc.lat - avgLat, 2) + Math.pow(loc.lng - avgLng, 2), 0) / 5;
 
             // Very low variance might indicate mock location
-            if (variance < 0.0000001) {
-                console.warn('⚠️ Suspiciously stable location');
+            if (variance < 0.00000001) { // Even more lenient
+                this.logWarning('Suspiciously stable location');
                 return false;
-            }
-        }
-
-        // Check for GPS signal strength indicators
-        if (location.accuracy !== undefined) {
-            // Sudden accuracy improvements might indicate mock location
-            if (this.locationHistory.length >= 2) {
-                const prev = this.locationHistory[this.locationHistory.length - 2];
-                if (prev.accuracy && location.accuracy < prev.accuracy * 0.1) {
-                    console.warn('⚠️ Unrealistic accuracy improvement');
-                    return false;
-                }
             }
         }
 
@@ -267,11 +250,11 @@ class AntiSpoof {
     }
 
     calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // Earth's radius in meters
-        const φ1 = this.toRadians(lat1);
-        const φ2 = this.toRadians(lat2);
-        const Δφ = this.toRadians(lat2 - lat1);
-        const Δλ = this.toRadians(lon2 - lon1);
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
 
         const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
                 Math.cos(φ1) * Math.cos(φ2) *
@@ -289,14 +272,14 @@ class AntiSpoof {
         return {
             historySize: this.locationHistory.length,
             suspiciousPatterns: this.suspiciousPatterns.length,
-            maxSpeed: this.maxSpeed,
-            maxJump: this.maxJump
+            warningCount: this.warningCount
         };
     }
 
     reset() {
         this.locationHistory = [];
         this.suspiciousPatterns = [];
+        this.warningCount = 0;
         console.log('🔄 AntiSpoof reset');
     }
 }
@@ -304,7 +287,7 @@ class AntiSpoof {
 // Make it globally available
 window.AntiSpoof = AntiSpoof;
 
-// Create default instance
+// Create default instance if not exists
 if (!window.antiSpoof) {
     window.antiSpoof = new AntiSpoof();
 }

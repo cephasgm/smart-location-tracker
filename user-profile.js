@@ -1,5 +1,5 @@
-// user-profile.js - Professional user profiles with avatars - v3.2.0
-// FEATURE: Built-in avatar generation - no external dependencies, works offline!
+// user-profile.js - Professional user profiles with avatars - v3.3.0
+// FIXED: Avatar generation with proper error handling and fallbacks
 
 class UserProfile {
     constructor() {
@@ -83,16 +83,19 @@ class UserProfile {
         });
     }
 
-    // ===== BEST FEATURE: Built-in Avatar Generation =====
+    // ===== FIXED: Avatar Generation with Error Handling =====
     async generateAvatar() {
-        return new Promise((resolve) => {
+        try {
             const canvas = document.createElement('canvas');
             canvas.width = 200;
             canvas.height = 200;
             const ctx = canvas.getContext('2d');
             
+            if (!ctx) {
+                throw new Error('Canvas context not available');
+            }
+            
             // Generate unique color based on user ID
-            // This ensures each user gets their own color
             const hue = this.currentUser?.uid ? 
                 parseInt(this.currentUser.uid.substring(0, 8), 16) % 360 : 
                 Math.floor(Math.random() * 360);
@@ -107,12 +110,10 @@ class UserProfile {
             // Get user initial
             let initial = '👤';
             if (this.currentUser?.email) {
-                // Use first letter of email
                 initial = this.currentUser.email[0].toUpperCase();
             } else if (this.currentUser?.displayName) {
                 initial = this.currentUser.displayName[0].toUpperCase();
             } else if (this.currentUser?.uid) {
-                // Use first character of uid if no email
                 initial = this.currentUser.uid[0].toUpperCase();
             }
             
@@ -122,7 +123,7 @@ class UserProfile {
             ctx.shadowBlur = 10;
             ctx.shadowOffsetX = 2;
             ctx.shadowOffsetY = 2;
-            ctx.font = 'bold 80px Arial';
+            ctx.font = 'bold 80px Arial, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(initial, 100, 110);
@@ -149,21 +150,39 @@ class UserProfile {
                 ctx.fill();
             }
             
-            // Convert canvas to data URL
-            resolve(canvas.toDataURL('image/png'));
-        });
+            // Convert canvas to data URL with fallback
+            try {
+                return canvas.toDataURL('image/png');
+            } catch (e) {
+                console.warn('PNG conversion failed, using fallback:', e);
+                return this.getFallbackAvatar(initial, hue);
+            }
+        } catch (error) {
+            console.error('Avatar generation failed:', error);
+            return this.getFallbackAvatar();
+        }
+    }
+
+    // ===== NEW: Fallback Avatar Method =====
+    getFallbackAvatar(initial = '?', hue = 200) {
+        // Create SVG data URL as ultimate fallback
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+            <rect width="200" height="200" fill="hsl(${hue}, 80%, 55%)"/>
+            <text x="100" y="120" font-size="80" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-weight="bold">${initial}</text>
+        </svg>`;
+        
+        return 'data:image/svg+xml,' + encodeURIComponent(svg);
     }
 
     async createDefaultProfile() {
         try {
-            // Generate avatar data URL (no external calls!)
+            // Generate avatar with fallback
             const avatarDataUrl = await this.generateAvatar();
             
             this.profile = {
                 uid: this.currentUser.uid,
                 displayName: this.currentUser.email ? this.currentUser.email.split('@')[0] : 'Anonymous User',
                 email: this.currentUser.email || '',
-                // Use generated avatar - no external dependencies!
                 photoURL: avatarDataUrl,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
@@ -180,7 +199,7 @@ class UserProfile {
 
             const db = window.firebaseServices.db;
             await db.collection('users').doc(this.currentUser.uid).set(this.profile);
-            console.log('✅ Default profile created with built-in avatar (no external dependencies)');
+            console.log('✅ Default profile created with built-in avatar');
         } catch (error) {
             console.error('Failed to create default profile:', error);
         }
@@ -203,7 +222,7 @@ class UserProfile {
             
             <div class="profile-avatar-section">
                 <div class="avatar-container">
-                    <img id="profileAvatar" src="${this.profile?.photoURL || ''}" alt="Avatar">
+                    <img id="profileAvatar" src="${this.profile?.photoURL || ''}" alt="Avatar" onerror="this.src='${this.getFallbackAvatar()}'">
                     <div class="avatar-overlay" id="changeAvatarBtn">
                         <span>📷 Change</span>
                     </div>
@@ -311,10 +330,17 @@ class UserProfile {
             document.getElementById('avatarInput').click();
         });
 
-        // UPDATED: Generate avatar button now uses built-in generation
+        // FIXED: Generate avatar button with proper error handling
         document.getElementById('generateAvatarBtn')?.addEventListener('click', async () => {
             try {
                 this.showToast('🎨 Generating avatar...', 'info');
+                
+                // Show loading state
+                const btn = document.getElementById('generateAvatarBtn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '⏳ Generating...';
+                btn.disabled = true;
+                
                 const avatarDataUrl = await this.generateAvatar();
                 
                 // Update UI
@@ -323,11 +349,17 @@ class UserProfile {
                 // Save to profile
                 this.profile.photoURL = avatarDataUrl;
                 
-                // Save to Firestore
-                const db = window.firebaseServices.db;
-                await db.collection('users').doc(this.currentUser.uid).update({
-                    photoURL: avatarDataUrl
-                });
+                // Save to Firestore if user is logged in
+                if (this.currentUser) {
+                    const db = window.firebaseServices.db;
+                    await db.collection('users').doc(this.currentUser.uid).update({
+                        photoURL: avatarDataUrl
+                    });
+                }
+                
+                // Reset button
+                btn.innerHTML = originalText;
+                btn.disabled = false;
                 
                 this.showToast('✅ Avatar generated and saved', 'success');
                 
@@ -336,7 +368,16 @@ class UserProfile {
                 }
             } catch (error) {
                 console.error('Avatar generation failed:', error);
-                this.showToast('❌ Failed to generate avatar', 'error');
+                this.showToast('❌ Failed to generate avatar - using fallback', 'error');
+                
+                // Use fallback avatar
+                const fallbackUrl = this.getFallbackAvatar();
+                document.getElementById('profileAvatar').src = fallbackUrl;
+                
+                // Reset button
+                const btn = document.getElementById('generateAvatarBtn');
+                btn.innerHTML = '🎨 Generate Avatar';
+                btn.disabled = false;
             }
         });
 
@@ -360,7 +401,7 @@ class UserProfile {
             const panel = document.getElementById('profilePanel');
             if (panel && panel.classList.contains('active') && 
                 !panel.contains(e.target) && 
-                !e.target.closest('.btn-primary')?.textContent.includes('Profile')) {
+                !e.target.closest('#profileBtn')) {
                 this.hidePanel();
             }
         });
@@ -651,7 +692,7 @@ class UserProfile {
         if (window.app && typeof window.app.showToast === 'function') {
             window.app.showToast(message, type);
         } else {
-            console.log(`Toast (${type}): ${message}`);
+            alert(message);
         }
     }
 }

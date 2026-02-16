@@ -17,15 +17,9 @@
     <meta name="apple-mobile-web-app-title" content="Smart Tracker">
     <meta name="format-detection" content="telephone=no">
     
-    <!-- Apple Touch Icon -->
+    <!-- Icons - remove preload, just link normally -->
     <link rel="apple-touch-icon" href="icon-192x192.png">
-    
-    <!-- Favicon fallback - emoji-based favicon to prevent 404 -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
-    
-    <!-- Standard favicon links with multiple sizes -->
     <link rel="shortcut icon" href="icon-72x72.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="icon-72x72.png">
     <link rel="icon" type="image/png" sizes="72x72" href="icon-72x72.png">
     <link rel="icon" type="image/png" sizes="96x96" href="icon-96x96.png">
     <link rel="icon" type="image/png" sizes="128x128" href="icon-128x128.png">
@@ -39,15 +33,11 @@
     <meta name="msapplication-TileColor" content="#2196f3">
     <meta name="msapplication-TileImage" content="icon-192x192.png">
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet CSS with crossorigin -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
     
-    <!-- Preload critical assets with proper as attributes -->
-    <link rel="preload" href="styles.css" as="style">
-    <link rel="preload" href="icon-192x192.png" as="image" type="image/png">
-    <link rel="preload" href="app.js" as="script">
-    <link rel="preload" href="location-engine.js" as="script">
-    <link rel="preload" href="firebase-init.js" as="script">
+    <!-- Favicon fallback - emoji-based favicon to prevent 404 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
 </head>
 <body>
     <div class="app-container">
@@ -126,13 +116,13 @@
     <!-- Toast notification container (for dynamic notifications) -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Third-party libraries -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Third-party libraries with crossorigin -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
     
-    <!-- Core modules in correct dependency order -->
+    <!-- Core modules in correct dependency order - local files don't need crossorigin -->
     <script src="firebase-init.js"></script>
     <script src="anti-spoof.js"></script>  <!-- Must load before location-engine -->
     <script src="geofence-engine.js"></script>

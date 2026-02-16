@@ -127,7 +127,6 @@ class LocationHistory {
     }
 
     compressLocations(locations, tolerance = 0.0001) {
-        // Ramer-Douglas-Peucker algorithm for route simplification
         if (locations.length < 3) return locations;
 
         const result = [];
@@ -138,7 +137,6 @@ class LocationHistory {
             const curr = locations[i];
             const next = locations[i + 1];
 
-            // Check if point is significant
             const distance = this.perpendicularDistance(
                 { lat: curr.lat, lng: curr.lng },
                 { lat: prev.lat, lng: prev.lng },
@@ -229,7 +227,6 @@ class LocationHistory {
         }
     }
 
-    // Playback controls
     async playTrip(tripId, map, speed = 1) {
         if (this.isPlaying) {
             this.stopPlayback();
@@ -251,12 +248,10 @@ class LocationHistory {
         this.playbackSpeed = speed;
         this.isPlaying = true;
         
-        // Start playback
         this.playbackInterval = setInterval(() => {
             this.playbackStep();
         }, 1000 / speed);
 
-        // Create timeline chart
         this.createTimelineChart(this.currentTrip.locations);
         
         console.log('▶️ Playback started');
@@ -294,17 +289,13 @@ class LocationHistory {
 
         const location = locations[currentIndex];
         
-        // Update marker
         marker.setLatLng([location.lat, location.lng]);
         
-        // Update polyline
         const path = locations.slice(0, currentIndex + 1).map(l => [l.lat, l.lng]);
         polyline.setLatLngs(path);
         
-        // Update info panel
         this.updatePlaybackInfo(location, currentIndex, locations.length);
         
-        // Center map on marker
         if (currentIndex === 0 || currentIndex % 10 === 0) {
             map.setView([location.lat, location.lng], 15);
         }
@@ -348,7 +339,6 @@ class LocationHistory {
     }
 
     createTimelineChart(locations) {
-        // Remove existing chart
         const existingChart = document.getElementById('timelineChart');
         if (existingChart) {
             existingChart.remove();
@@ -371,7 +361,6 @@ class LocationHistory {
             mapContainer.appendChild(canvas);
         }
 
-        // Simple chart drawing
         setTimeout(() => {
             this.drawSimpleChart(canvas, locations);
         }, 100);
@@ -470,7 +459,6 @@ class LocationHistory {
                 console.log('Share cancelled');
             }
         } else {
-            // Fallback - copy to clipboard
             try {
                 await navigator.clipboard.writeText(JSON.stringify(tripData));
                 this.showToast('📋 Trip data copied to clipboard');
@@ -503,7 +491,6 @@ class LocationHistory {
   </trk>
 </gpx>`;
 
-        // Download GPX file
         const blob = new Blob([gpx], { type: 'application/gpx+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -602,15 +589,11 @@ class LocationHistory {
 
     simplifyRoute(locations, maxPoints = 100) {
         if (locations.length <= maxPoints) return locations;
-
-        // Simple downsampling - take every nth point
         const step = Math.floor(locations.length / maxPoints);
         return locations.filter((_, i) => i % step === 0);
     }
 
     formatDuration(seconds) {
-        if (!seconds) return '0s';
-        
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
@@ -624,7 +607,6 @@ class LocationHistory {
     }
 
     updateStatistics() {
-        // Ensure statistics object exists
         if (!this.statistics) {
             this.statistics = {
                 totalDistance: 0,
@@ -662,7 +644,6 @@ class LocationHistory {
 
     async deleteTrip(tripId) {
         try {
-            // Delete trip
             const tripTransaction = this.db.transaction(['trips'], 'readwrite');
             const tripStore = tripTransaction.objectStore('trips');
             await new Promise((resolve, reject) => {
@@ -671,7 +652,6 @@ class LocationHistory {
                 request.onerror = () => reject(request.error);
             });
 
-            // Delete locations
             const locTransaction = this.db.transaction(['locations'], 'readwrite');
             const locStore = locTransaction.objectStore('locations');
             const index = locStore.index('tripId');
@@ -703,8 +683,6 @@ class LocationHistory {
     showToast(message, type = 'success') {
         if (window.app && window.app.showToast) {
             window.app.showToast(message, type);
-        } else {
-            console.log(`Toast (${type}): ${message}`);
         }
     }
 }

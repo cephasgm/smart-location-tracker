@@ -1,19 +1,19 @@
 // navigation-engine.js - Professional route planning with Bolt/Google Maps style navigation
-// Version 2.0.0 - Fixed OSRM warning and 'self' references
+// Version 2.1.0 - FIXED: Added useDemo:false to suppress OSRM warning
 
 class NavigationEngine {
     constructor() {
         this.map = null;
         this.routingControl = null;
         this.currentRoute = null;
-        this.currentPosition = null; // Fixed: was self.currentPosition
-        this.destination = null; // Fixed: was self.destination
-        this.waypoints = []; // Fixed: was self.waypoints
-        this.navigationActive = false; // Fixed: was self.navigationActive
-        this.routeAlternatives = []; // Fixed: was self.routeAlternatives
+        this.currentPosition = null;
+        this.destination = null;
+        this.waypoints = [];
+        this.navigationActive = false;
+        this.routeAlternatives = [];
         this.trafficLayer = null;
         this.voiceGuidance = true;
-        this.units = 'metric'; // or 'imperial'
+        this.units = 'metric';
         
         // Route options
         this.routeOptions = {
@@ -41,7 +41,7 @@ class NavigationEngine {
     }
 
     async loadTrafficData() {
-        // Load traffic layer - use free layer instead of Thunderforest
+        // Load traffic layer - use free layer
         this.trafficLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             attribution: '©OpenStreetMap, ©CartoDB',
             maxZoom: 19
@@ -51,18 +51,18 @@ class NavigationEngine {
     setupRouting(map) {
         this.map = map;
         
-        // Initialize routing control with professional settings
-        // Using a more reliable routing service to avoid OSRM demo warnings
+        // FIXED: Added useDemo:false to suppress OSRM warning
         this.routingControl = L.Routing.control({
             waypoints: [],
             router: L.Routing.osrmv1({
-                serviceUrl: 'https://router.project-osrm.org/route/v1', // Will still show warning but works
-                profile: 'driving', // driving, walking, cycling
-                alternatives: 2, // Request up to 2 alternative routes
+                serviceUrl: 'https://router.project-osrm.org/route/v1',
+                profile: 'driving',
+                alternatives: 2,
                 steps: true,
                 geometries: 'polyline',
                 overview: 'full',
-                annotations: true
+                annotations: true,
+                useDemo: false // This suppresses the warning
             }),
             routeWhileDragging: true,
             showAlternatives: true,
@@ -393,6 +393,38 @@ class NavigationEngine {
             console.error('Location search failed:', error);
             return [];
         }
+    }
+
+    async searchAndRoute(from, to) {
+        try {
+            const fromResults = await this.searchLocation(from);
+            const toResults = await this.searchLocation(to);
+            
+            if (fromResults.length > 0 && toResults.length > 0) {
+                const start = {
+                    lat: fromResults[0].lat,
+                    lng: fromResults[0].lng
+                };
+                const end = {
+                    lat: toResults[0].lat,
+                    lng: toResults[0].lng
+                };
+                
+                await this.setRoute(start, end);
+            } else {
+                this.showError('Location not found');
+            }
+        } catch (error) {
+            console.error('Search and route failed:', error);
+            this.showError('Failed to calculate route');
+        }
+    }
+
+    clearRoute() {
+        if (this.routingControl) {
+            this.routingControl.setWaypoints([]);
+        }
+        this.stopNavigation();
     }
 
     addWaypoint(lat, lng) {

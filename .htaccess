@@ -1,15 +1,3 @@
-<!-- 404.html - place in root -->
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Redirecting...</title>
-    <script>
-        // Redirect to main app
-        window.location.href = '/';
-    </script>
-</head>
-<body>
-    <p>Redirecting to Smart Location Tracker...</p>
-</body>
-</html>
+# _headers file
+/smart-location-tracker/*
+  Service-Worker-Allowed: /smart-location-tracker/

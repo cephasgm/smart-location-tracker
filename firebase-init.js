@@ -58,7 +58,23 @@ try {
     
     // Initialize Analytics if available
     if (firebase.analytics) {
-        analytics = firebase.analytics();
+        try {
+            analytics = firebase.analytics();
+            // FIXED: Test analytics and handle ad-blockers gracefully
+            analytics.logEvent('test_event', { test: true })
+                .then(() => {
+                    console.log('✅ Firebase Analytics initialized');
+                })
+                .catch((e) => {
+                    console.log('📊 Analytics unavailable (likely ad-blocker)');
+                    analytics = null;
+                });
+        } catch (e) {
+            console.log('📊 Analytics initialization failed (ad-blocker detected)');
+            analytics = null;
+        }
+    } else {
+        console.log('📊 Firebase Analytics not available');
     }
     
     firebaseInitialized = true;
@@ -88,3 +104,8 @@ console.log('📊 Firebase Services Status:', {
     analytics: !!analytics,
     initialized: firebaseInitialized
 });
+
+// Export for module usage if needed
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = firebaseServices;
+}

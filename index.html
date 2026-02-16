@@ -42,9 +42,18 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
-    <!-- Preload critical assets -->
+    <!-- Preload critical assets with proper as attributes -->
     <link rel="preload" href="styles.css" as="style">
-    <link rel="preload" href="icon-192x192.png" as="image">
+    <link rel="preload" href="icon-192x192.png" as="image" type="image/png">
+    <link rel="preload" href="app.js" as="script">
+    <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" crossorigin>
+    <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" as="script" crossorigin>
+    
+    <!-- DNS Prefetch for external domains -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body>
     <div class="app-container">

@@ -33,8 +33,14 @@
     <meta name="msapplication-TileColor" content="#667eea">
     <meta name="msapplication-TileImage" content="icon-192x192.png">
     
-    <!-- Leaflet CSS -->
+    <!-- Leaflet CSS and Plugins -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.css" />
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     
     <!-- Favicon - emoji-based to prevent 404 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
@@ -75,6 +81,26 @@
                 <div class="tracking-controls">
                     <button id="startTrackingBtn" class="btn btn-success" disabled>▶ Start Tracking</button>
                     <button id="stopTrackingBtn" class="btn btn-danger" disabled>⏹ Stop Tracking</button>
+                </div>
+
+                <!-- NEW: Feature Buttons -->
+                <div class="feature-buttons">
+                    <button class="btn btn-primary" onclick="navigationEngine.setupRouting(map)">🗺️ Navigate</button>
+                    <button class="btn btn-primary" onclick="locationHistory.playTrip()">📜 History</button>
+                    <button class="btn btn-primary" onclick="socialSharing.showPanel()">📤 Share</button>
+                    <button class="btn btn-primary" onclick="userProfile.showPanel()">👤 Profile</button>
+                </div>
+
+                <!-- NEW: Search Box for Navigation -->
+                <div class="search-container" id="searchContainer" style="display: none;">
+                    <div class="search-box">
+                        <input type="text" id="searchFrom" placeholder="From location...">
+                        <input type="text" id="searchTo" placeholder="To destination...">
+                        <div class="search-actions">
+                            <button class="btn btn-success" onclick="navigationEngine.calculateRoute()">🚗 Go</button>
+                            <button class="btn btn-secondary" onclick="navigationEngine.clearRoute()">✕ Clear</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Location Information Display -->
@@ -121,9 +147,17 @@
 
     <!-- Third-party libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js"></script>
+    <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js" crossorigin="anonymous"></script>
+    
+    <!-- Sentry for error tracking -->
+    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
     
     <!-- Core modules -->
     <script src="firebase-init.js"></script>
@@ -132,6 +166,16 @@
     <script src="offline-queue.js"></script>
     <script src="auth.js"></script>
     <script src="location-engine.js"></script>
+    
+    <!-- NEW: Feature Modules -->
+    <script src="navigation-engine.js"></script>
+    <script src="location-history.js"></script>
+    <script src="social-sharing.js"></script>
+    <script src="user-profile.js"></script>
+    <script src="analytics.js"></script>
+    <script src="virtual-scroll.js"></script>
+    
+    <!-- Main app -->
     <script src="app.js"></script>
 
     <!-- Service Worker Registration -->
@@ -143,12 +187,59 @@
                 })
                 .then(registration => {
                     console.log('✅ ServiceWorker registered:', registration.scope);
+                    
+                    // Check for updates
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        console.log('🔄 New service worker installing');
+                        
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // New version available
+                                if (confirm('New version available! Reload to update?')) {
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    });
                 })
                 .catch(error => {
                     console.error('❌ ServiceWorker registration failed:', error);
                 });
             });
+
+            // Handle service worker updates
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                }
+            });
         }
+
+        // Install prompt handler
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Show install button
+            const installBtn = document.createElement('button');
+            installBtn.id = 'installBtn';
+            installBtn.className = 'btn btn-primary';
+            installBtn.innerHTML = '📱 Install App';
+            installBtn.onclick = () => {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('✅ User accepted install');
+                    }
+                    deferredPrompt = null;
+                });
+            };
+            document.querySelector('.header-actions').appendChild(installBtn);
+        });
     </script>
 </body>
 </html>

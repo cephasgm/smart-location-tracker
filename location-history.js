@@ -1,9 +1,9 @@
 // location-history.js - Professional location playback with timeline and analytics
-// Version 2.0.0 - Fully tested and working
+// Version 2.1.0 - FIXED: Added showPanel() method and proper UI
 
 class LocationHistory {
     constructor() {
-        // Initialize properties with proper 'this' instead of 'self'
+        // Initialize properties
         this.trips = [];
         this.currentTrip = null;
         this.playbackSpeed = 1;
@@ -11,8 +11,9 @@ class LocationHistory {
         this.playbackInterval = null;
         this.timelineChart = null;
         this.db = null;
+        this.historyPanel = null;
         
-        // Initialize statistics object properly
+        // Initialize statistics
         this.statistics = {
             totalDistance: 0,
             totalDuration: 0,
@@ -25,6 +26,7 @@ class LocationHistory {
         // Initialize storage and load trips
         this.initStorage().then(() => {
             this.loadTrips();
+            this.createHistoryPanel();
         });
         
         console.log('📜 LocationHistory initialized');
@@ -63,6 +65,153 @@ class LocationHistory {
         });
     }
 
+    // ===== NEW: Create History Panel =====
+    createHistoryPanel() {
+        // Remove existing panel if any
+        const existingPanel = document.getElementById('historyPanel');
+        if (existingPanel) {
+            existingPanel.remove();
+        }
+
+        const panel = document.createElement('div');
+        panel.id = 'historyPanel';
+        panel.className = 'history-panel';
+        panel.innerHTML = `
+            <div class="history-header">
+                <h4>📜 Trip History</h4>
+                <button class="close-btn" id="closeHistoryBtn">✕</button>
+            </div>
+            <div class="history-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Total Trips</span>
+                    <span class="stat-value" id="historyTotalTrips">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Distance</span>
+                    <span class="stat-value" id="historyTotalDistance">0 km</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Time</span>
+                    <span class="stat-value" id="historyTotalTime">0h</span>
+                </div>
+            </div>
+            <div class="history-list" id="historyList">
+                <div class="loading-spinner">Loading trips...</div>
+            </div>
+        `;
+
+        document.body.appendChild(panel);
+        this.historyPanel = panel;
+
+        // Add close button listener
+        document.getElementById('closeHistoryBtn')?.addEventListener('click', () => {
+            this.hidePanel();
+        });
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            if (panel.classList.contains('active') && 
+                !panel.contains(e.target) && 
+                !e.target.closest('#historyBtn')) {
+                this.hidePanel();
+            }
+        });
+    }
+
+    // ===== NEW: Show History Panel =====
+    async showPanel() {
+        if (!this.historyPanel) {
+            this.createHistoryPanel();
+        }
+
+        // Load latest trips
+        await this.loadTrips();
+        this.renderTripsList();
+        this.updateHistoryStats();
+
+        this.historyPanel.classList.add('active');
+    }
+
+    // ===== NEW: Hide History Panel =====
+    hidePanel() {
+        if (this.historyPanel) {
+            this.historyPanel.classList.remove('active');
+        }
+    }
+
+    // ===== NEW: Render Trips List =====
+    renderTripsList() {
+        const listEl = document.getElementById('historyList');
+        if (!listEl) return;
+
+        if (this.trips.length === 0) {
+            listEl.innerHTML = `
+                <div class="empty-state">
+                    <p>📭 No trips yet</p>
+                    <p>Start tracking to see your history here</p>
+                </div>
+            `;
+            return;
+        }
+
+        listEl.innerHTML = this.trips.map(trip => `
+            <div class="trip-item" data-trip-id="${trip.id}">
+                <div class="trip-header">
+                    <span class="trip-name">${trip.name}</span>
+                    <span class="trip-date">${new Date(trip.startTime).toLocaleDateString()}</span>
+                </div>
+                <div class="trip-details">
+                    <span>📏 ${(trip.distance / 1000).toFixed(2)} km</span>
+                    <span>⏱️ ${this.formatDuration(trip.duration)}</span>
+                    <span>⚡ ${(trip.maxSpeed * 3.6).toFixed(1)} km/h</span>
+                </div>
+                <div class="trip-actions">
+                    <button class="btn-small" onclick="window.locationHistory.playTripFromList(${trip.id})">▶ Play</button>
+                    <button class="btn-small" onclick="window.locationHistory.viewTripDetails(${trip.id})">📊 Details</button>
+                    <button class="btn-small btn-danger" onclick="window.locationHistory.deleteTrip(${trip.id})">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // ===== NEW: Update History Stats =====
+    updateHistoryStats() {
+        const totalTripsEl = document.getElementById('historyTotalTrips');
+        const totalDistanceEl = document.getElementById('historyTotalDistance');
+        const totalTimeEl = document.getElementById('historyTotalTime');
+
+        if (totalTripsEl) totalTripsEl.textContent = this.statistics.totalTrips;
+        if (totalDistanceEl) totalDistanceEl.textContent = `${(this.statistics.totalDistance / 1000).toFixed(1)} km`;
+        if (totalTimeEl) totalTimeEl.textContent = `${Math.floor(this.statistics.totalDuration / 3600)}h`;
+    }
+
+    // ===== NEW: Play Trip from List =====
+    async playTripFromList(tripId) {
+        if (!window.locationEngine || !window.locationEngine.map) {
+            this.showToast('Map not ready', 'error');
+            return;
+        }
+
+        await this.playTrip(tripId, window.locationEngine.map);
+        this.hidePanel();
+    }
+
+    // ===== NEW: View Trip Details =====
+    async viewTripDetails(tripId) {
+        const trip = this.trips.find(t => t.id === tripId);
+        if (!trip) return;
+
+        const locations = await this.loadTripLocations(tripId);
+        
+        alert(`
+📊 Trip Details: ${trip.name}
+📏 Distance: ${(trip.distance / 1000).toFixed(2)} km
+⏱️ Duration: ${this.formatDuration(trip.duration)}
+⚡ Max Speed: ${(trip.maxSpeed * 3.6).toFixed(1)} km/h
+📍 Points: ${trip.locations || locations.length}
+        `);
+    }
+
     async saveTrip(locations, metadata = {}) {
         if (!locations || locations.length === 0) return null;
 
@@ -99,6 +248,7 @@ class LocationHistory {
             this.trips.push(trip);
             this.updateStatistics();
             
+            this.showToast('✅ Trip saved');
             return trip;
         } catch (error) {
             console.error('Failed to save trip:', error);
@@ -233,7 +383,10 @@ class LocationHistory {
         }
 
         const locations = await this.loadTripLocations(tripId);
-        if (!locations || locations.length === 0) return;
+        if (!locations || locations.length === 0) {
+            this.showToast('No location data for this trip', 'error');
+            return;
+        }
 
         this.currentTrip = {
             id: tripId,
@@ -255,6 +408,7 @@ class LocationHistory {
         this.createTimelineChart(this.currentTrip.locations);
         
         console.log('▶️ Playback started');
+        this.showToast('▶️ Playback started');
     }
 
     createPlaybackMarker(map) {
@@ -643,6 +797,8 @@ class LocationHistory {
     }
 
     async deleteTrip(tripId) {
+        if (!confirm('Delete this trip?')) return;
+
         try {
             const tripTransaction = this.db.transaction(['trips'], 'readwrite');
             const tripStore = tripTransaction.objectStore('trips');
@@ -672,6 +828,8 @@ class LocationHistory {
 
             this.trips = this.trips.filter(t => t.id !== tripId);
             this.updateStatistics();
+            this.renderTripsList();
+            this.updateHistoryStats();
             this.showToast('✅ Trip deleted');
             
         } catch (error) {
@@ -683,6 +841,8 @@ class LocationHistory {
     showToast(message, type = 'success') {
         if (window.app && window.app.showToast) {
             window.app.showToast(message, type);
+        } else {
+            alert(message);
         }
     }
 }
